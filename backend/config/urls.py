@@ -6,4 +6,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/auth/login", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/v1/", include("apps.catalog.urls")),
+    path("api/v1/", include("apps.orders.urls")),
 ]
