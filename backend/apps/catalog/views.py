@@ -1,5 +1,5 @@
 from django.db.models import QuerySet
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView, RetrieveAPIView
 
 from apps.catalog.models import Product
 from apps.catalog.pagination import ProductPagination
@@ -19,3 +19,8 @@ class ProductListView(ListAPIView):
         if location:
             products = products.filter(location=location)
         return products
+
+
+class ProductDetailView(RetrieveAPIView):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
