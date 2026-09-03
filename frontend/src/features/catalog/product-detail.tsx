@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { useAuth } from "@/features/auth/auth-provider";
 import { ApiError } from "@/lib/api/client";
 import { getProduct } from "@/lib/api/products";
+import { PurchaseButton } from "@/features/orders/purchase-button";
 
 const locationNames = { JO: "Jordan", SA: "Saudi Arabia" } as const;
 
@@ -73,13 +74,7 @@ export function ProductDetail({ productId }: Readonly<{ productId: number }>) {
           <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
             Purchase creates a permanent receipt for this item and price.
           </p>
-          <button
-            type="button"
-            disabled
-            className="mt-8 w-full cursor-not-allowed rounded-xl bg-[var(--accent)] px-4 py-3.5 font-bold text-[#08120e] opacity-70"
-          >
-            Buy item
-          </button>
+          <PurchaseButton productId={product.data.id} />
         </aside>
       </div>
     </>
