@@ -186,6 +186,8 @@ trade-offs behind each meaningful choice.
 - Each purchase creates one order for one product.
 - Prices use two decimal places and a single unspecified settlement currency.
 - Product IDs in the source CSV are stable external identifiers.
+- The prompt did not include product rows, so `data/items.csv` contains representative
+  fictional assessment data matching the required schema and locations.
 
 ## Trade-offs
 
