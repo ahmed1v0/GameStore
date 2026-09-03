@@ -15,11 +15,6 @@ class ProtectedView(APIView):
 urlpatterns = [path("protected", ProtectedView.as_view())]
 
 
-@pytest.fixture
-def api_client() -> APIClient:
-    return APIClient()
-
-
 @pytest.mark.django_db
 def test_valid_credentials_return_tokens(api_client: APIClient, django_user_model) -> None:
     django_user_model.objects.create_user(username="demo", password="correct-password")
