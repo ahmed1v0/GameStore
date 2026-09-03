@@ -40,6 +40,8 @@ public.
 `Product` uses the CSV identifier as its primary key and constrains price and
 location in PostgreSQL. `Order` belongs to a Django user and product while
 copying title, price, and location so later product edits cannot rewrite history.
+The product location column is indexed because every catalog filter uses it;
+other fields remain unindexed until a demonstrated query pattern needs them.
 
 ## API Architecture
 
