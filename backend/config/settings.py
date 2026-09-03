@@ -104,4 +104,7 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Authenticated catalog browsing and single-product purchasing.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "ProductLocationEnum": "apps.catalog.models.Product.Location",
+    },
 }
