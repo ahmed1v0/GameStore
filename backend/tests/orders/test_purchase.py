@@ -33,19 +33,21 @@ def test_authenticated_user_can_purchase(
     assert response.data["id"] == order.id
 
 
-def test_authenticated_user_is_always_inferred_from_token(
+def test_caller_cannot_submit_another_user_id(
     authenticated_client: APIClient, user, django_user_model, product_factory
 ) -> None:
     another_user = django_user_model.objects.create_user(username="another", password="password")
     product = product_factory()
 
-    authenticated_client.post(
+    response = authenticated_client.post(
         reverse("order-create"),
         {"product_id": product.id, "user_id": another_user.id},
         format="json",
     )
 
-    assert Order.objects.get().user == user
+    assert response.status_code == 400
+    assert str(response.data["user_id"]) == "Unknown field."
+    assert Order.objects.count() == 0
 
 
 def test_receipt_snapshots_survive_product_changes(
@@ -76,6 +78,17 @@ def test_unknown_product_is_rejected(authenticated_client: APIClient) -> None:
     )
 
     assert response.status_code == 404
+    assert Order.objects.count() == 0
+
+
+@pytest.mark.parametrize("payload", [{}, {"product_id": 0}, {"product_id": "invalid"}])
+def test_invalid_purchase_payload_is_rejected(
+    authenticated_client: APIClient, payload: dict[str, object]
+) -> None:
+    response = authenticated_client.post(reverse("order-create"), payload, format="json")
+
+    assert response.status_code == 400
+    assert "product_id" in response.data
     assert Order.objects.count() == 0
 
 

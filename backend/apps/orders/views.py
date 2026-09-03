@@ -1,3 +1,4 @@
+from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.generics import RetrieveAPIView
@@ -24,5 +25,5 @@ class OrderCreateView(APIView):
 class OrderDetailView(RetrieveAPIView):
     serializer_class = OrderReceiptSerializer
 
-    def get_queryset(self):  # type: ignore[no-untyped-def]
+    def get_queryset(self) -> QuerySet[Order]:
         return Order.objects.filter(user=self.request.user).select_related("product")
