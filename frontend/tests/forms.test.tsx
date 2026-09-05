@@ -246,7 +246,9 @@ it("keeps recovery acknowledgments generic", async () => {
 it("redirects unauthenticated visitors without rendering protected content", () => {
   mocks.auth.mockReturnValue({
     isReady: true,
+    status: "anonymous",
     session: null,
+    notice: null,
     startupError: null,
   });
   render(
@@ -255,13 +257,15 @@ it("redirects unauthenticated visitors without rendering protected content", () 
     </RequireAuth>,
   );
   expect(screen.queryByText("Private receipt")).not.toBeInTheDocument();
-  expect(mocks.replace).toHaveBeenCalledWith("/login");
+  expect(mocks.replace).toHaveBeenCalledWith("/login?returnTo=%2F");
 });
 
 it("denies the admin page to ordinary users", () => {
   mocks.auth.mockReturnValue({
     isReady: true,
+    status: "authenticated",
     session: { user: { role: "user" } },
+    notice: null,
     startupError: null,
   });
   render(
@@ -276,7 +280,9 @@ it("denies the admin page to ordinary users", () => {
 it("lets admins reach the user manager", () => {
   mocks.auth.mockReturnValue({
     isReady: true,
+    status: "authenticated",
     session: { user: { role: "admin" } },
+    notice: null,
     startupError: null,
   });
   render(

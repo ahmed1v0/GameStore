@@ -7,9 +7,10 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.template.loader import render_to_string
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
@@ -65,28 +66,27 @@ def send_account_email(user, purpose, *, invitation=False):
 
         if invitation:
             subject = "You're invited to Game Store"
-            body = (
-                "An administrator created a Game Store account for you.\n\n"
-                f"Set your password to finish setup:\n{link}\n\n"
-                "If you were not expecting this invitation, ignore this email."
-            )
+            template = "invitation"
         else:
             subject = (
                 "Verify your Game Store email"
                 if purpose == EmailToken.Purpose.VERIFY
                 else "Reset your Game Store password"
             )
-            body = (
-                f"{subject}\n\nOpen this link to continue:\n{link}\n\n"
-                "If you did not request this, ignore this email."
-            )
+            template = "verification" if purpose == EmailToken.Purpose.VERIFY else "password_reset"
 
-        transaction.on_commit(lambda: deliver_email(subject, body, user.email))
+        context = {"username": user.username, "action_url": link}
+        body = render_to_string(f"accounts/email/{template}.txt", context)
+        html = render_to_string(f"accounts/email/{template}.html", context)
+
+        transaction.on_commit(lambda: deliver_email(subject, body, html, user.email))
 
 
-def deliver_email(subject, body, recipient):
+def deliver_email(subject, body, html, recipient):
     try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient], fail_silently=False)
+        email = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
+        email.attach_alternative(html, "text/html")
+        email.send(fail_silently=False)
     except Exception:
         # Do not log SMTP exception text: it can contain credentials or message content.
         logger.error("Account email delivery failed; the user can request a resend.")

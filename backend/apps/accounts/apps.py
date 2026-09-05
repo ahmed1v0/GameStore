@@ -7,6 +7,7 @@ class AccountsConfig(AppConfig):
 
     def ready(self):
         from . import (
+            checks,  # noqa: F401
             schema,  # noqa: F401
             signals,  # noqa: F401
         )

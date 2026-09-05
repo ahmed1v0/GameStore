@@ -2,7 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 
 import { StoreMark } from "@/components/store-mark";
 import { ApiError } from "@/lib/api/client";
@@ -15,8 +20,17 @@ import { useAuthCooldown } from "./use-auth-cooldown";
 export function LoginForm() {
   const { status, login, session, notice } = useAuth();
   const router = useRouter();
-  const [returnTo, setReturnTo] = useState("/products");
-  const [routeNotice, setRouteNotice] = useState<string | null>(null);
+  const search = useSyncExternalStore(
+    () => () => {},
+    () => window.location.search,
+    () => "",
+  );
+  const params = new URLSearchParams(search);
+  const returnTo = safeReturnTo(params.get("returnTo"));
+  const routeNotice =
+    params.get("reason") === "session-expired"
+      ? "Your session expired. Sign in again to continue."
+      : null;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -25,18 +39,10 @@ export function LoginForm() {
   const { cooldownSeconds, captureCooldown } = useAuthCooldown();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const destination = safeReturnTo(params.get("returnTo"));
-    setReturnTo(destination);
-    setRouteNotice(
-      params.get("reason") === "session-expired"
-        ? "Your session expired. Sign in again to continue."
-        : null,
-    );
     if (status === "authenticated" && session) {
-      router.replace(destination);
+      router.replace(returnTo);
     }
-  }, [router, session, status]);
+  }, [returnTo, router, session, status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

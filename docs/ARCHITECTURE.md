@@ -1,7 +1,7 @@
 # Architecture
 
-Email verification is configurable through `EMAIL_VERIFICATION_ENABLED` and disabled
-by default. The API exposes the effective policy to signup and account screens.
+Email verification is configurable through `EMAIL_VERIFICATION_ENABLED`; the example
+environment and this workspace enable it. The API exposes the effective policy to signup and account screens.
 Skipping verification does not mark an email verified or bypass account deactivation.
 
 The `accounts` app extends Django's existing User model with verification and session

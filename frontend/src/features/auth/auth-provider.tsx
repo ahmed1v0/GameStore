@@ -27,10 +27,7 @@ import {
 } from "./session-store";
 
 export type AuthStatus =
-  | "initializing"
-  | "authenticated"
-  | "anonymous"
-  | "unavailable";
+  "initializing" | "authenticated" | "anonymous" | "unavailable";
 
 type AuthContextValue = {
   session: AuthSession | null;
@@ -62,6 +59,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [attempt, setAttempt] = useState(0);
   const [logoutError, setLogoutError] = useState(false);
   const revalidation = useRef<Promise<void> | null>(null);
+  const revalidationController = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -88,7 +86,6 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
 
   useEffect(() => {
     let active = true;
-    setStatus("initializing");
     void refreshSession()
       .then((next) => {
         if (!active) return;
@@ -107,23 +104,14 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     };
   }, [attempt]);
 
-  useEffect(() => {
-    if (session) {
-      setStartupError(null);
-      setStatus("authenticated");
-      return;
-    }
-    setStatus((current) =>
-      current === "authenticated" ? "anonymous" : current,
-    );
-  }, [session]);
-
   const revalidateSession = useCallback((): Promise<void> => {
     if (revalidation.current) return revalidation.current;
     const current = getSession();
     if (!current) return Promise.resolve();
 
-    const operation = getMe(current.access)
+    const controller = new AbortController();
+    revalidationController.current = controller;
+    const operation = getMe(current.access, controller.signal)
       .then((user) => {
         updateSessionUser(user);
       })
@@ -132,7 +120,10 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
         // preserve the current session and should not interrupt the user.
       })
       .finally(() => {
-        if (revalidation.current === operation) revalidation.current = null;
+        if (revalidation.current === operation) {
+          revalidation.current = null;
+          revalidationController.current = null;
+        }
       });
     revalidation.current = operation;
     return operation;
@@ -148,6 +139,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     document.addEventListener("visibilitychange", check);
     const interval = window.setInterval(check, 5 * 60 * 1000);
     return () => {
+      revalidationController.current?.abort();
       window.clearInterval(interval);
       window.removeEventListener("focus", check);
       document.removeEventListener("visibilitychange", check);
@@ -172,13 +164,19 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     setStartupError(null);
   }, []);
 
+  const effectiveStatus: AuthStatus = session
+    ? "authenticated"
+    : status === "authenticated"
+      ? "anonymous"
+      : status;
+  const effectiveStartupError = session ? null : startupError;
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      status,
-      isReady: status !== "initializing",
+      status: effectiveStatus,
+      isReady: effectiveStatus !== "initializing",
       notice,
-      startupError,
+      startupError: effectiveStartupError,
       retrySession() {
         setStartupError(null);
         setStatus("initializing");
@@ -190,9 +188,9 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     }),
     [
       session,
-      status,
+      effectiveStatus,
       notice,
-      startupError,
+      effectiveStartupError,
       revalidateSession,
       logout,
       login,

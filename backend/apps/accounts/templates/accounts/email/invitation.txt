@@ -1,0 +1,6 @@
+Hello {{ username }},
+
+An administrator created a Game Store account for you. Set your password to finish setup:
+{{ action_url }}
+
+This link expires in one hour and can be used once. If you were not expecting this invitation, ignore this email.

@@ -138,6 +138,11 @@ debugging enabled.
 | `DEBUG` | Django debug mode | `true` |
 | `ALLOWED_HOSTS` | Comma-separated hosts | `localhost,127.0.0.1` |
 | `CORS_ALLOWED_ORIGINS` | Allowed browser origins | `http://localhost:3000` |
+| `EMAIL_VERIFICATION_ENABLED` | Require new users to verify email | `true` in `.env.example` |
+| `EMAIL_BACKEND` | Console locally or SMTP delivery | Console backend in `.env.example` |
+| `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | SMTP credentials | Empty |
+| `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | SMTP transport security (choose one) | `true` / `false` |
+| `EMAIL_TIMEOUT` | Maximum SMTP wait in seconds | `10` |
 
 ### Frontend
 
@@ -158,9 +163,9 @@ administrator. This file is ignored by Git and does not create an account.
 Both catalog and user lists paginate in SQL. See [page performance](docs/PERFORMANCE.md)
 for query budgets, cancellation, caching, index setup and scaling considerations.
 
-Sign up at `/signup`, then sign in immediately. Email verification is disabled by
-default. To enable it, set `EMAIL_VERIFICATION_ENABLED=true` in the backend environment
-and restart Django; new signups then follow the link printed by console email.
+Email verification follows `EMAIL_VERIFICATION_ENABLED`. The example enables it,
+and this workspace's local environment is enabled. With console email, new signups
+follow the verification link printed by Django; with SMTP they receive text and HTML mail.
 Existing accounts retain access. Use `createsuperuser` to
 bootstrap the first administrator, then manage users at `/admin/users`.
 

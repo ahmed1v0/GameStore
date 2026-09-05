@@ -177,6 +177,9 @@ def test_signup_verify_login_and_replay(api_client, post, django_user_model):
     assert not user.is_staff and not user.is_superuser and not user.groups.exists()
     assert user.security.verification_required and not user.security.email_verified_at
     token = token_from_email()
+    assert len(mail.outbox[0].alternatives) == 1
+    assert mail.outbox[0].alternatives[0].mimetype == "text/html"
+    assert "Verify email" in mail.outbox[0].alternatives[0].content
     assert EmailToken.objects.get(user=user).digest != token
     assert (
         post(
@@ -374,7 +377,8 @@ def test_throttles_email_requests(api_client, post):
 
 def test_delivery_failure_is_generic_and_does_not_log_secrets(api_client, post, account, caplog):
     with patch(
-        "apps.accounts.services.send_mail", side_effect=RuntimeError("secret SMTP password")
+        "django.core.mail.EmailMultiAlternatives.send",
+        side_effect=RuntimeError("secret SMTP password"),
     ):
         response = post(api_client, "auth/forgot-password", {"email": account.email})
     assert response.status_code == 200
