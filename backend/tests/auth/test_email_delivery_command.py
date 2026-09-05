@@ -1,4 +1,6 @@
+import smtplib
 from io import StringIO
+from unittest.mock import patch
 
 import pytest
 from django.core import mail
@@ -18,3 +20,12 @@ def test_email_delivery_command_sends_text_and_html():
 def test_email_delivery_command_validates_recipient():
     with pytest.raises(CommandError, match="valid email"):
         call_command("test_email_delivery", "not-an-address")
+
+
+def test_email_delivery_command_explains_gmail_authentication_failures():
+    with patch(
+        "django.core.mail.EmailMultiAlternatives.send",
+        side_effect=smtplib.SMTPAuthenticationError(535, b"Bad credentials"),
+    ):
+        with pytest.raises(CommandError, match="Google App Password"):
+            call_command("test_email_delivery", "owner@example.com")

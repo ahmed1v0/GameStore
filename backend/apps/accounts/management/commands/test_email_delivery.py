@@ -1,3 +1,5 @@
+import smtplib
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
@@ -28,6 +30,20 @@ class Command(BaseCommand):
             "<p>Your <strong>Game Store</strong> email configuration is working.</p>",
             "text/html",
         )
-        if message.send(fail_silently=False) != 1:
+
+        try:
+            sent = message.send(fail_silently=False)
+        except smtplib.SMTPAuthenticationError as exc:
+            raise CommandError(
+                "SMTP authentication failed. For Gmail, enable 2-Step Verification and use "
+                "a Google App Password in EMAIL_HOST_PASSWORD."
+            ) from exc
+        except (smtplib.SMTPException, OSError) as exc:
+            raise CommandError(
+                f"SMTP delivery failed ({type(exc).__name__}). Verify EMAIL_HOST, EMAIL_PORT, "
+                "EMAIL_USE_TLS/EMAIL_USE_SSL, and network access."
+            ) from exc
+
+        if sent != 1:
             raise CommandError("The email backend did not accept the test message.")
         self.stdout.write(self.style.SUCCESS("The email backend accepted the test message."))

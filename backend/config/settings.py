@@ -5,6 +5,8 @@ from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
 
+from .email import default_from_email, normalize_smtp_password
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -118,23 +120,30 @@ AUTH_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
 EMAIL_BACKEND = os.getenv(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend"
     if DEBUG
     else "django.core.mail.backends.smtp.EmailBackend",
 )
-EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost").strip()
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "").strip()
+EMAIL_HOST_PASSWORD = normalize_smtp_password(
+    EMAIL_HOST,
+    os.getenv("EMAIL_HOST_PASSWORD", ""),
+)
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
 EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "false").lower() == "true"
 EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Game Store <noreply@example.com>")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "").strip() or default_from_email(
+    EMAIL_HOST_USER
+)
 EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"))
 EMAIL_VERIFICATION_ENABLED = os.getenv("EMAIL_VERIFICATION_ENABLED", "false").lower() == "true"
 PASSWORD_RESET_TIMEOUT = int(os.getenv("PASSWORD_RESET_TIMEOUT", "3600"))
+
 # Configure a shared Redis cache for consistent throttling across deployed workers.
 if os.getenv("CACHE_URL"):
     CACHES = {
