@@ -28,9 +28,12 @@ def document_auth_errors(result, generator, request, public):
                     {
                         "name": "X-CSRFToken",
                         "in": "header",
-                        "required": True,
+                        "required": False,
                         "schema": {"type": "string"},
-                        "description": "Token from GET /api/v1/auth/csrf. Send its cookie too.",
+                        "description": (
+                            "Required for browser clients. Swagger UI fetches a fresh token from "
+                            "GET /api/v1/auth/csrf and injects this header automatically."
+                        ),
                     }
                 )
             if path in {"/api/v1/auth/refresh", "/api/v1/auth/logout"} and method == "post":

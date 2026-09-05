@@ -26,9 +26,15 @@ def test_schema_is_public_and_contains_application_contract(api_client: APIClien
     } <= set(paths)
     assert "/api/v1/admin/users" in paths
     assert "/api/v1/admin/users/{id}" in paths
-    assert any(
-        p["name"] == "X-CSRFToken" for p in paths["/api/v1/auth/login"]["post"]["parameters"]
+
+    csrf_parameter = next(
+        p
+        for p in paths["/api/v1/auth/login"]["post"]["parameters"]
+        if p["name"] == "X-CSRFToken"
     )
+    assert csrf_parameter["required"] is False
+    assert "Swagger UI" in csrf_parameter["description"]
+
     assert "/api/v1/products" in paths
     assert "/api/v1/products/{id}" in paths
     assert "/api/v1/orders" in paths
@@ -44,8 +50,11 @@ def test_schema_is_public_and_contains_application_contract(api_client: APIClien
 
 
 @pytest.mark.django_db
-def test_swagger_ui_is_public(api_client: APIClient) -> None:
+def test_swagger_ui_is_public_and_initializes_csrf(api_client: APIClient) -> None:
     response = api_client.get(reverse("swagger-ui"))
 
     assert response.status_code == 200
     assert b"Game Store API" in response.content
+    assert b"requestInterceptor" in response.content
+    assert b"/api/v1/auth/csrf" in response.content
+    assert b"X-CSRFToken" in response.content

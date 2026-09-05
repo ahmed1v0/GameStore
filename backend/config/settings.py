@@ -6,6 +6,7 @@ import dj_database_url
 from dotenv import load_dotenv
 
 from .email import default_from_email, normalize_smtp_password
+from .swagger import SWAGGER_UI_SETTINGS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -158,6 +159,7 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Authenticated catalog browsing and single-product purchasing.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "SWAGGER_UI_SETTINGS": SWAGGER_UI_SETTINGS,
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
         "apps.accounts.schema.document_auth_errors",
