@@ -3,11 +3,23 @@ import { z, type ZodType } from "zod";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return null;
+  return Math.max(0, Math.ceil((timestamp - Date.now()) / 1000));
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
     readonly details: unknown,
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -54,12 +66,22 @@ export async function rawRequest<T>(
     cache: "no-store",
   });
   const body: unknown = await response.json().catch(() => null);
-  if (!response.ok)
+  if (!response.ok) {
+    const retryAfterSeconds = parseRetryAfter(
+      response.headers.get("Retry-After"),
+    );
+    const baseMessage = errorMessage(body, response.status);
+    const message =
+      response.status === 429 && retryAfterSeconds !== null
+        ? `Too many attempts. Try again in ${retryAfterSeconds}s.`
+        : baseMessage;
     throw new ApiError(
-      errorMessage(body, response.status),
+      message,
       response.status,
       body,
+      retryAfterSeconds,
     );
+  }
   return schema.parse(body);
 }
 
