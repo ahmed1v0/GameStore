@@ -10,8 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
-import type { Product } from "@/lib/api/products";
 import { useAuth } from "@/features/auth/auth-provider";
+import { productSchema, type Product } from "@/lib/api/products";
 
 type CartContextValue = {
   items: Product[];
@@ -40,9 +40,10 @@ export function CartProvider({ children }: Readonly<{ children: ReactNode }>) {
     }
     try {
       const stored = window.localStorage.getItem(`game-store-cart-${userId}`);
-      const parsed: unknown = stored ? JSON.parse(stored) : [];
+      const raw: unknown = stored ? JSON.parse(stored) : [];
+      const parsed = productSchema.array().safeParse(raw);
       startTransition(() => {
-        setItems(Array.isArray(parsed) ? (parsed as Product[]) : []);
+        setItems(parsed.success ? parsed.data : []);
         setHydratedUser(userId);
       });
     } catch {

@@ -8,6 +8,8 @@ from uuid import uuid4
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.catalog.models import Product
 
@@ -50,8 +52,26 @@ def test_imports_valid_products(csv_path: Path, capsys: pytest.CaptureFixture[st
     call_command("import_items", csv_path)
 
     assert Product.objects.count() == 2
-    assert Product.objects.get(id=1).price == Decimal("9.99")
+    assert Product.objects.get(id=1).price == Decimal("9.990")
     assert "2 created, 0 updated" in capsys.readouterr().out
+
+
+def test_import_uses_one_region_lookup_for_the_whole_file(csv_path: Path) -> None:
+    write_csv(
+        csv_path,
+        [product_row(id=str(index), location="JO" if index % 2 else "SA") for index in range(1, 31)],
+    )
+
+    with CaptureQueriesContext(connection) as queries:
+        call_command("import_items", csv_path)
+
+    region_selects = [
+        query["sql"]
+        for query in queries
+        if 'FROM "catalog_region"' in query["sql"] and query["sql"].lstrip().upper().startswith("SELECT")
+    ]
+    assert len(region_selects) == 1
+    assert Product.objects.count() == 30
 
 
 def test_second_import_updates_without_duplicates(csv_path: Path) -> None:
@@ -64,7 +84,7 @@ def test_second_import_updates_without_duplicates(csv_path: Path) -> None:
     assert Product.objects.count() == 1
     product = Product.objects.get(id=1)
     assert product.title == "Updated Pack"
-    assert product.price == Decimal("12.50")
+    assert product.price == Decimal("12.500")
 
 
 @pytest.mark.parametrize(
@@ -72,6 +92,7 @@ def test_second_import_updates_without_duplicates(csv_path: Path) -> None:
     [
         ({"location": "US"}, "not a valid choice"),
         ({"price": "not-money"}, "price must be a decimal number"),
+        ({"price": "-0.01"}, "price must be non-negative"),
         ({"id": "0"}, "id must be a positive integer"),
     ],
 )
@@ -79,6 +100,15 @@ def test_rejects_invalid_rows(csv_path: Path, overrides: dict[str, str], message
     write_csv(csv_path, [product_row(**overrides)])
 
     with pytest.raises(CommandError, match=message):
+        call_command("import_items", csv_path)
+
+    assert Product.objects.count() == 0
+
+
+def test_rejects_currency_precision_beyond_minor_unit(csv_path: Path) -> None:
+    write_csv(csv_path, [product_row(location="SA", price="1.234")])
+
+    with pytest.raises(CommandError, match="SAR amounts support at most 2 decimal places"):
         call_command("import_items", csv_path)
 
     assert Product.objects.count() == 0

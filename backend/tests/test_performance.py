@@ -31,6 +31,7 @@ def test_catalog_pagination_happens_in_sql(authenticated_client, product_factory
     page_query = next(sql for sql in queries if 'FROM "catalog_product"' in sql and "LIMIT" in sql)
     assert "LIMIT 12 OFFSET 12" in page_query
     assert "ORDER BY" in page_query and "location" in page_query
+    assert 'JOIN "catalog_region"' in page_query
 
 
 def test_user_pages_have_constant_query_cost_and_server_search(
@@ -75,7 +76,10 @@ def test_detail_pages_have_bounded_queries_without_receipt_product_join(
         product=product,
         product_title=product.title,
         unit_price=product.price,
-        product_location=product.location,
+        product_location=product.location_id,
+        product_location_name=product.location.name,
+        currency_code=product.location.currency_code,
+        currency_minor_unit=product.location.minor_unit,
     )
     _, product_queries = measured_get(authenticated_client, f"/api/v1/products/{product.pk}")
     receipt, receipt_queries = measured_get(authenticated_client, f"/api/v1/orders/{order.pk}")

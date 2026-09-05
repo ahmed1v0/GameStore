@@ -1,68 +1,129 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { useAuth } from "@/features/auth/auth-provider";
-import { buttonClass, inputClass } from "@/features/auth/auth-form";
-import { updateProduct, type Product, type ProductInput } from "@/lib/api/products";
+import {
+  deleteProduct,
+  getRegions,
+  updateProduct,
+  type Product,
+  type ProductInput,
+} from "@/lib/api/products";
+
+import { DeleteProductModal, ProductMutationModal } from "./product-modals";
 
 export function AdminProductEditor({ product }: Readonly<{ product: Product }>) {
   const { session } = useAuth();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<ProductInput>({
-    title: product.title,
-    description: product.description,
-    price: product.price,
-    location: product.location,
+  const router = useRouter();
+  const [activeModal, setActiveModal] = useState<"edit" | "delete" | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const regions = useQuery({
+    queryKey: ["regions", session?.user.id],
+    queryFn: ({ signal }) => getRegions(session!.access, signal),
+    enabled: Boolean(session),
+    staleTime: 5 * 60 * 1000,
   });
-  const mutation = useMutation({
-    mutationFn: () =>
-      updateProduct(product.id, session!.access, {
-        title: form.title,
-        description: form.description,
-        price: form.price,
-        location: form.location,
-      }),
+
+  const updateMutation = useMutation({
+    mutationFn: (input: ProductInput) => updateProduct(product.id, session!.access, input),
     onSuccess: (updated) => {
-      setForm({ ...updated });
-      void queryClient.invalidateQueries({ queryKey: ["product"] });
+      setActiveModal(null);
+      setMessage("Product updated successfully.");
+      queryClient.setQueryData(["product", session?.user.id, updated.id], updated);
       void queryClient.invalidateQueries({ queryKey: ["products"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-products"] });
     },
   });
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    mutation.mutate();
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteProduct(product.id, session!.access),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["product", session?.user.id, product.id] });
+      void queryClient.invalidateQueries({ queryKey: ["products"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+      router.push("/admin/products");
+    },
+  });
+
+  const busy = updateMutation.isPending || deleteMutation.isPending;
+
+  function closeModal() {
+    if (!busy) setActiveModal(null);
   }
 
   return (
-    <form onSubmit={submit} className="mt-8 grid gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 sm:grid-cols-2">
-      <h2 className="text-xl font-bold sm:col-span-2">Edit item</h2>
-      <label className="sm:col-span-2">
-        <span className="mb-2 block text-sm font-semibold">Title</span>
-        <input className={inputClass} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required />
-      </label>
-      <label className="sm:col-span-2">
-        <span className="mb-2 block text-sm font-semibold">Description</span>
-        <textarea className={`${inputClass} min-h-28`} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} required />
-      </label>
-      <label>
-        <span className="mb-2 block text-sm font-semibold">Price</span>
-        <input className={inputClass} type="number" min="0" step="0.01" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} required />
-      </label>
-      <label>
-        <span className="mb-2 block text-sm font-semibold">Location</span>
-        <select className={inputClass} value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value as ProductInput["location"] })}>
-          <option value="JO">Jordan</option>
-          <option value="SA">Saudi Arabia</option>
-        </select>
-      </label>
-      <div className="sm:col-span-2">
-        <button className={buttonClass} disabled={mutation.isPending}>Save changes</button>
-        {mutation.isSuccess && <p role="status" className="mt-3 text-[var(--accent)]">Product updated.</p>}
-        {mutation.error && <p role="alert" className="mt-3 text-[var(--danger)]">{mutation.error.message}</p>}
+    <section className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
+            Admin controls
+          </p>
+          <h2 className="mt-2 text-xl font-bold">Manage this product</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted)]">
+            Editing affects future purchases only. Deletion is blocked when purchase history exists.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              updateMutation.reset();
+              setMessage(null);
+              setActiveModal("edit");
+            }}
+            className="rounded-xl border border-[var(--border)] px-4 py-3 font-semibold transition hover:border-[var(--border-strong)] hover:bg-white/[0.025]"
+          >
+            Edit product
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              deleteMutation.reset();
+              setMessage(null);
+              setActiveModal("delete");
+            }}
+            className="rounded-xl border border-[var(--danger)]/40 px-4 py-3 font-semibold text-[var(--danger)] transition hover:bg-[var(--danger)]/10"
+          >
+            Delete product
+          </button>
+        </div>
       </div>
-    </form>
+
+      {message && (
+        <p
+          role="status"
+          className="mt-4 rounded-xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-4 py-3 text-sm font-semibold text-[var(--accent)]"
+        >
+          {message}
+        </p>
+      )}
+
+      <ProductMutationModal
+        open={activeModal === "edit"}
+        mode="edit"
+        product={product}
+        regions={regions.data}
+        regionsPending={regions.isPending}
+        regionsError={regions.isError}
+        pending={updateMutation.isPending}
+        error={updateMutation.error?.message}
+        onClose={closeModal}
+        onSubmit={(input) => updateMutation.mutate(input)}
+      />
+
+      <DeleteProductModal
+        open={activeModal === "delete"}
+        product={product}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+        onClose={closeModal}
+        onConfirm={() => deleteMutation.mutate()}
+      />
+    </section>
   );
 }

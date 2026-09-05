@@ -143,6 +143,23 @@ describe("session lifecycle", () => {
 });
 
 describe("authenticated requests", () => {
+  it("preserves the purchase key and payload when retrying after token refresh", async () => {
+    const { ApiError } = await import("@/lib/api/transport");
+    mocks.post.mockResolvedValue(session);
+    mocks.request
+      .mockRejectedValueOnce(new ApiError("expired", 401, null))
+      .mockResolvedValueOnce({ id: 19 });
+    const { purchaseProduct } = await import("@/lib/api/orders");
+    const key = crypto.randomUUID();
+    await purchaseProduct(7, "expired", key);
+    expect(mocks.request).toHaveBeenCalledTimes(2);
+    for (const [path, , init] of mocks.request.mock.calls) {
+      expect(path).toBe("/orders");
+      expect(init.headers.get("Idempotency-Key")).toBe(key);
+      expect(init.body).toBe(JSON.stringify({ product_id: 7 }));
+    }
+    expect(mocks.request.mock.calls[1][2].headers.get("Authorization")).toBe("Bearer access-one");
+  });
   it("refreshes once after a 401 and retries with the new access token", async () => {
     const { ApiError } = await import("@/lib/api/transport");
     mocks.post.mockResolvedValue(session);

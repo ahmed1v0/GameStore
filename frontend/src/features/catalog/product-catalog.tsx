@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { useAuth } from "@/features/auth/auth-provider";
-import { getProducts, type ProductLocation } from "@/lib/api/products";
+import { getProducts, getRegions, type ProductLocation } from "@/lib/api/products";
 
 import { ProductCard } from "./product-card";
 
@@ -14,6 +14,14 @@ export function ProductCatalog() {
   const { session } = useAuth();
   const [page, setPage] = useState(1);
   const [location, setLocation] = useState<ProductLocation | "">("");
+
+  const regions = useQuery({
+    queryKey: ["regions", session?.user.id],
+    queryFn: ({ signal }) => getRegions(session!.access, signal),
+    enabled: Boolean(session),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const products = useQuery({
     queryKey: ["products", session?.user.id, page, PAGE_SIZE, location],
     queryFn: ({ signal }) =>
@@ -42,24 +50,28 @@ export function ProductCatalog() {
             Digital game items
           </h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-[var(--muted)]">
-            Browse region-specific cosmetics, map packs, and profile
-            collectibles.
+            Browse region-specific cosmetics, map packs, and profile collectibles with prices in
+            each market&apos;s settlement currency.
           </p>
         </div>
 
-        <label className="w-full sm:w-52">
+        <label className="w-full sm:w-56">
           <span className="mb-2 block text-sm font-semibold">Available in</span>
           <select
             value={location}
+            disabled={regions.isPending || regions.isError}
             onChange={(event) => {
               setLocation(event.target.value as ProductLocation | "");
               setPage(1);
             }}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:opacity-60"
           >
             <option value="">All locations</option>
-            <option value="JO">Jordan</option>
-            <option value="SA">Saudi Arabia</option>
+            {regions.data?.map((region) => (
+              <option key={region.code} value={region.code}>
+                {region.name}
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -84,20 +96,19 @@ export function ProductCatalog() {
             type="button"
             disabled={!products.data.previous || products.isFetching}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
-            className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition hover:border-[#46556e] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition hover:border-[var(--border-strong)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Previous
           </button>
           <p className="text-sm text-[var(--muted)]">
             {products.isPlaceholderData ? "Loading page" : "Page"}{" "}
-            <span className="font-semibold text-white">{page}</span> ·{" "}
-            {products.data.count} items
+            <span className="font-semibold text-white">{page}</span> · {products.data.count} items
           </p>
           <button
             type="button"
             disabled={!products.data.next || products.isFetching}
             onClick={() => setPage((current) => current + 1)}
-            className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition hover:border-[#46556e] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold transition hover:border-[var(--border-strong)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next
           </button>
@@ -121,10 +132,7 @@ function CatalogResults({ isError, isLoading, products }: CatalogResultsProps) {
         aria-label="Loading products"
       >
         {Array.from({ length: 6 }, (_, index) => (
-          <div
-            key={index}
-            className="h-64 animate-pulse rounded-2xl bg-[var(--surface)]"
-          />
+          <div key={index} className="h-64 animate-pulse rounded-2xl bg-[var(--surface)]" />
         ))}
       </div>
     );
