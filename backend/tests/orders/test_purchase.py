@@ -1,5 +1,5 @@
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from django.urls import reverse
@@ -16,7 +16,7 @@ def test_authenticated_user_can_purchase(
 ) -> None:
     product = product_factory(
         title="Petra Explorer Pack",
-        price=Decimal("19.99"),
+        price=Decimal("19.990"),
         location=Product.Location.JORDAN,
     )
 
@@ -32,8 +32,12 @@ def test_authenticated_user_can_purchase(
     assert order.user == user
     assert order.product == product
     assert order.product_title == "Petra Explorer Pack"
-    assert order.unit_price == Decimal("19.99")
+    assert order.unit_price == Decimal("19.990")
     assert order.product_location == "JO"
+    assert order.product_location_name == "Jordan"
+    assert order.currency_code == "JOD"
+    assert order.currency_minor_unit == 3
+    assert UUID(str(response.data["reference"])) == order.reference
     assert response.data["id"] == order.id
 
 
@@ -67,7 +71,7 @@ def test_receipt_snapshots_survive_product_changes(
     order_id = purchase_response.data["id"]
 
     product.title = "Changed title"
-    product.price = Decimal("20.00")
+    product.price = Decimal("20.000")
     product.location_id = "JO"
     product.save()
 
@@ -75,8 +79,11 @@ def test_receipt_snapshots_survive_product_changes(
 
     assert receipt.status_code == 200
     assert receipt.data["product_title"] == "Original title"
-    assert receipt.data["unit_price"] == "10.00"
+    assert receipt.data["unit_price"] == "10.000"
+    assert receipt.data["currency_code"] == "SAR"
+    assert receipt.data["currency_minor_unit"] == 2
     assert receipt.data["product_location"] == "SA"
+    assert receipt.data["product_location_name"] == "Saudi Arabia"
 
 
 def test_unknown_product_is_rejected(authenticated_client: APIClient) -> None:
@@ -122,6 +129,9 @@ def test_user_cannot_read_another_users_receipt(
         product_title=product.title,
         unit_price=product.price,
         product_location=product.location_id,
+        product_location_name=product.location.name,
+        currency_code=product.location.currency_code,
+        currency_minor_unit=product.location.minor_unit,
     )
 
     response = authenticated_client.get(reverse("order-detail", args=[order.id]))

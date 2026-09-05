@@ -26,8 +26,9 @@ def purchase_product(
         return existing, False
 
     product = get_object_or_404(Product.objects.select_related("location"), pk=product_id)
-    # The unique database constraint arbitrates simultaneous requests across workers.
-    # get_or_create recovers from a competing insert and returns its committed receipt.
+    # The database uniqueness constraint arbitrates concurrent retries across workers.
+    # The receipt snapshots every customer-visible monetary and regional value so later
+    # catalog changes cannot rewrite purchase history.
     order, created = Order.objects.get_or_create(
         user=user,
         idempotency_key=idempotency_key,
@@ -36,6 +37,9 @@ def purchase_product(
             "product_title": product.title,
             "unit_price": product.price,
             "product_location": product.location_id,
+            "product_location_name": product.location.name,
+            "currency_code": product.location.currency_code,
+            "currency_minor_unit": product.location.minor_unit,
         },
     )
     if order.product_id != product_id:

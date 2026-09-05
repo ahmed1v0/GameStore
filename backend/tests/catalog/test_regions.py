@@ -9,8 +9,8 @@ def test_returns_normalized_region_lookup(authenticated_client) -> None:
 
     assert response.status_code == 200
     assert response.data == [
-        {"code": "JO", "name": "Jordan", "currency_code": "JOD"},
-        {"code": "SA", "name": "Saudi Arabia", "currency_code": "SAR"},
+        {"code": "JO", "name": "Jordan", "currency_code": "JOD", "minor_unit": 3},
+        {"code": "SA", "name": "Saudi Arabia", "currency_code": "SAR", "minor_unit": 2},
     ]
 
 
@@ -23,3 +23,4 @@ def test_product_response_uses_region_reference_data(authenticated_client, produ
     assert response.data["results"][0]["location"] == "JO"
     assert response.data["results"][0]["location_name"] == "Jordan"
     assert response.data["results"][0]["currency"] == "JOD"
+    assert response.data["results"][0]["minor_unit"] == 3

@@ -35,7 +35,11 @@ class RegionListView(ListAPIView):
     serializer_class = RegionSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None
-    queryset = Region.objects.filter(is_active=True).only("code", "name", "currency_code").order_by("code")
+    queryset = (
+        Region.objects.filter(is_active=True)
+        .only("code", "name", "currency_code", "minor_unit")
+        .order_by("code")
+    )
 
 
 @extend_schema(

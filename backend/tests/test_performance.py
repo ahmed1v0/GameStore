@@ -77,6 +77,9 @@ def test_detail_pages_have_bounded_queries_without_receipt_product_join(
         product_title=product.title,
         unit_price=product.price,
         product_location=product.location_id,
+        product_location_name=product.location.name,
+        currency_code=product.location.currency_code,
+        currency_minor_unit=product.location.minor_unit,
     )
     _, product_queries = measured_get(authenticated_client, f"/api/v1/products/{product.pk}")
     receipt, receipt_queries = measured_get(authenticated_client, f"/api/v1/orders/{order.pk}")

@@ -8,6 +8,7 @@ import { AddToCartButton } from "@/features/cart/add-to-cart-button";
 import { PurchaseButton } from "@/features/orders/purchase-button";
 import { ApiError } from "@/lib/api/client";
 import { getProduct } from "@/lib/api/products";
+import { formatMoney } from "@/lib/money";
 
 import { AdminProductEditor } from "./admin-product-editor";
 
@@ -63,10 +64,11 @@ export function ProductDetail({ productId }: Readonly<{ productId: number }>) {
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
             One-time price
           </p>
-          <p className="mt-3 text-5xl font-bold tracking-tight">{product.data.price}</p>
-          <p className="mt-1 text-sm font-semibold text-[var(--accent)]">{product.data.currency}</p>
+          <p className="mt-3 text-4xl font-bold tracking-tight">
+            {formatMoney(product.data.price, product.data.currency, product.data.minor_unit)}
+          </p>
           <p className="mt-4 text-sm leading-6 text-[var(--muted)]">
-            Purchase creates a permanent receipt for this item, market and price.
+            Purchase creates a permanent receipt for this item, market, currency and price.
           </p>
           <PurchaseButton productId={product.data.id} />
           <AddToCartButton product={product.data} />

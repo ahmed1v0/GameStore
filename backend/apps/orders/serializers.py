@@ -23,9 +23,13 @@ class OrderReceiptSerializer(serializers.ModelSerializer):
         model = Order
         fields = (
             "id",
+            "reference",
             "product_id",
             "product_title",
             "unit_price",
+            "currency_code",
+            "currency_minor_unit",
             "product_location",
+            "product_location_name",
             "created_at",
         )

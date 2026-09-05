@@ -16,8 +16,8 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 const fetcher = vi.fn();
 const clients: QueryClient[] = [];
 const regionLookup = [
-  { code: "JO", name: "Jordan", currency_code: "JOD" },
-  { code: "SA", name: "Saudi Arabia", currency_code: "SAR" },
+  { code: "JO", name: "Jordan", currency_code: "JOD", minor_unit: 3 },
+  { code: "SA", name: "Saudi Arabia", currency_code: "SAR", minor_unit: 2 },
 ];
 
 beforeEach(() => {
@@ -44,10 +44,11 @@ function product(id: number, location = "JO") {
     id,
     title: `Item ${id}`,
     description: "Digital item",
-    price: "10.00",
+    price: jordan ? "10.000" : "10.00",
     location,
     location_name: jordan ? "Jordan" : "Saudi Arabia",
     currency: jordan ? "JOD" : "SAR",
+    minor_unit: jordan ? 3 : 2,
     created_at: "2026-09-05",
     updated_at: "2026-09-05",
   };

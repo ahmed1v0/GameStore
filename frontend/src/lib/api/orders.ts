@@ -4,10 +4,14 @@ import { apiRequest } from "./client";
 
 export const orderReceiptSchema = z.object({
   id: z.number().int().positive(),
+  reference: z.string().uuid(),
   product_id: z.number().int().positive(),
   product_title: z.string(),
   unit_price: z.string(),
+  currency_code: z.enum(["JOD", "SAR"]),
+  currency_minor_unit: z.number().int().min(0).max(3),
   product_location: z.enum(["JO", "SA"]),
+  product_location_name: z.string(),
   created_at: z.string(),
 });
 

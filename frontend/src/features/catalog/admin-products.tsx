@@ -7,13 +7,14 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "@/features/auth/auth-provider";
 import { buttonClass, inputClass } from "@/features/auth/auth-form";
 import { createProduct, getProducts, getRegions, type ProductInput } from "@/lib/api/products";
+import { formatMoney, moneyInputStep } from "@/lib/money";
 
 const PAGE_SIZE = 10;
 
 const emptyProduct: ProductInput = {
   title: "",
   description: "",
-  price: "0.00",
+  price: "0.000",
   location: "JO",
 };
 
@@ -55,6 +56,9 @@ export function AdminProducts() {
       void queryClient.invalidateQueries({ queryKey: ["admin-products"] });
     },
   });
+
+  const selectedRegion = regions.data?.find((region) => region.code === form.location);
+  const priceStep = moneyInputStep(selectedRegion?.minor_unit ?? 3);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -105,17 +109,24 @@ export function AdminProducts() {
           />
         </label>
         <label>
-          <span className="mb-2 block text-sm font-semibold">Price</span>
+          <span className="mb-2 block text-sm font-semibold">
+            Price{selectedRegion ? ` (${selectedRegion.currency_code})` : ""}
+          </span>
           <input
             className={inputClass}
             type="number"
             min="0"
-            step="0.001"
+            step={priceStep}
             inputMode="decimal"
             value={form.price}
             onChange={(event) => setForm({ ...form, price: event.target.value })}
             required
           />
+          {selectedRegion && (
+            <span className="mt-1.5 block text-xs text-[var(--muted)]">
+              Up to {selectedRegion.minor_unit} decimal places.
+            </span>
+          )}
         </label>
         <label>
           <span className="mb-2 block text-sm font-semibold">Location</span>
@@ -217,7 +228,7 @@ export function AdminProducts() {
                   </div>
                   <span className="text-sm text-[var(--muted)]">{product.location_name}</span>
                   <span className="font-mono text-sm font-semibold">
-                    {product.price} {product.currency}
+                    {formatMoney(product.price, product.currency)}
                   </span>
                   <Link
                     href={`/products/${product.id}`}

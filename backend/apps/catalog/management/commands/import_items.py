@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import transaction
 
-from apps.catalog.models import Product
+from apps.catalog.models import Product, Region
 
 REQUIRED_COLUMNS = ("id", "title", "description", "price", "location")
 
@@ -20,7 +20,8 @@ class Command(BaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         csv_path: Path = options["csv_path"]
-        product_data = self._read_and_validate(csv_path)
+        regions = Region.objects.filter(is_active=True).in_bulk()
+        product_data = self._read_and_validate(csv_path, regions)
         products = [Product(**values) for values in product_data]
         product_ids = [product.id for product in products]
 
@@ -44,7 +45,9 @@ class Command(BaseCommand):
             )
         )
 
-    def _read_and_validate(self, csv_path: Path) -> list[dict[str, Any]]:
+    def _read_and_validate(
+        self, csv_path: Path, regions: dict[str, Region]
+    ) -> list[dict[str, Any]]:
         try:
             with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
                 reader = csv.DictReader(csv_file)
@@ -53,7 +56,7 @@ class Command(BaseCommand):
                 products: list[dict[str, Any]] = []
                 seen_ids: set[int] = set()
                 for line_number, row in enumerate(reader, start=2):
-                    product = self._parse_row(row, line_number)
+                    product = self._parse_row(row, line_number, regions)
                     product_id = product["id"]
                     if product_id in seen_ids:
                         raise CommandError(
@@ -77,7 +80,9 @@ class Command(BaseCommand):
             raise CommandError(f"CSV file is missing required columns: {', '.join(missing)}.")
 
     @staticmethod
-    def _parse_row(row: dict[str, str | None], line_number: int) -> dict[str, Any]:
+    def _parse_row(
+        row: dict[str, str | None], line_number: int, regions: dict[str, Region]
+    ) -> dict[str, Any]:
         values: dict[str, str] = {}
         for field in REQUIRED_COLUMNS:
             raw_value = row.get(field)
@@ -98,16 +103,29 @@ class Command(BaseCommand):
             raise CommandError(f"Row {line_number}: price must be a decimal number.") from exc
         if not price.is_finite():
             raise CommandError(f"Row {line_number}: price must be a finite decimal number.")
+        if price < 0:
+            raise CommandError(f"Row {line_number}: price must be non-negative.")
+
+        location_code = values["location"].upper()
+        region = regions.get(location_code)
+        if region is None:
+            raise CommandError(
+                f"Row {line_number}: '{location_code}' is not a valid choice for location."
+            )
 
         product = Product(
             id=product_id,
             title=values["title"],
             description=values["description"],
             price=price,
-            location_id=values["location"].upper(),
+            location=region,
         )
         try:
-            product.full_clean(validate_unique=False)
+            # Validate field shape and domain rules without running database-backed
+            # uniqueness/constraint checks for every CSV row. The final bulk write is
+            # still protected by database constraints inside one atomic transaction.
+            product.clean_fields(exclude=["location"])
+            product.clean()
         except ValidationError as exc:
             messages = "; ".join(exc.messages)
             raise CommandError(f"Row {line_number}: {messages}") from exc

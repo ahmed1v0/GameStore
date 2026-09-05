@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { Product } from "@/lib/api/products";
+import { formatMoney } from "@/lib/money";
 
 export function ProductCard({ product }: Readonly<{ product: Product }>) {
   return (
@@ -19,7 +20,7 @@ export function ProductCard({ product }: Readonly<{ product: Product }>) {
         <p>
           <span className="block text-xs uppercase tracking-wider text-[var(--muted)]">Price</span>
           <span className="mt-1 block text-xl font-bold">
-            {product.price} <span className="text-sm text-[var(--muted)]">{product.currency}</span>
+            {formatMoney(product.price, product.currency, product.minor_unit)}
           </span>
         </p>
         <Link

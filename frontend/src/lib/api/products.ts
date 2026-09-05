@@ -6,6 +6,7 @@ export const regionSchema = z.object({
   code: z.enum(["JO", "SA"]),
   name: z.string(),
   currency_code: z.string().length(3),
+  minor_unit: z.number().int().min(0).max(3),
 });
 
 export const productSchema = z.object({
@@ -16,6 +17,7 @@ export const productSchema = z.object({
   location: z.enum(["JO", "SA"]),
   location_name: z.string(),
   currency: z.string().length(3),
+  minor_unit: z.number().int().min(0).max(3),
   created_at: z.string(),
   updated_at: z.string(),
 });

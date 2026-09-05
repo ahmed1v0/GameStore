@@ -6,8 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/features/auth/auth-provider";
 import { ApiError } from "@/lib/api/client";
 import { getOrder } from "@/lib/api/orders";
-
-const locationNames = { JO: "Jordan", SA: "Saudi Arabia" } as const;
+import { formatMoney } from "@/lib/money";
 
 export function OrderReceipt({ orderId }: Readonly<{ orderId: number }>) {
   const { session } = useAuth();
@@ -57,33 +56,37 @@ export function OrderReceipt({ orderId }: Readonly<{ orderId: number }>) {
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
               Purchase complete
             </p>
-            <h1 className="mt-3 text-4xl font-bold tracking-tight">
-              Your receipt
-            </h1>
+            <h1 className="mt-3 text-4xl font-bold tracking-tight">Your receipt</h1>
           </div>
-          <span className="rounded-full bg-white/6 px-3 py-1.5 font-mono text-xs text-[var(--muted)]">
+          <span className="rounded-full border border-[var(--border)] bg-white/[0.025] px-3 py-1.5 font-mono text-xs text-[var(--muted)]">
             #{order.data.id}
           </span>
         </div>
 
         <dl className="divide-y divide-[var(--border)]">
-          <ReceiptRow label="Order ID" value={String(order.data.id)} />
+          <ReceiptRow label="Transaction reference" value={order.data.reference} mono />
           <ReceiptRow label="Product" value={order.data.product_title} />
           <ReceiptRow
-            label="Price paid"
-            value={order.data.unit_price}
+            label="Amount paid"
+            value={formatMoney(
+              order.data.unit_price,
+              order.data.currency_code,
+              order.data.currency_minor_unit,
+            )}
             emphasized
           />
-          <ReceiptRow
-            label="Location"
-            value={locationNames[order.data.product_location]}
-          />
+          <ReceiptRow label="Market" value={order.data.product_location_name} />
           <ReceiptRow label="Purchased" value={purchasedAt} />
         </dl>
 
+        <p className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-xs leading-5 text-[var(--muted)]">
+          This receipt is a snapshot of the product, market, currency and amount at the time of
+          purchase. Later catalog changes do not rewrite it.
+        </p>
+
         <Link
           href="/products"
-          className="mt-8 inline-flex rounded-xl border border-[var(--border)] px-4 py-3 text-sm font-bold transition hover:border-[#46556e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          className="mt-8 inline-flex rounded-xl border border-[var(--border)] px-4 py-3 text-sm font-bold transition hover:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
         >
           Continue browsing
         </Link>
@@ -95,12 +98,15 @@ export function OrderReceipt({ orderId }: Readonly<{ orderId: number }>) {
 function ReceiptRow({
   emphasized = false,
   label,
+  mono = false,
   value,
-}: Readonly<{ emphasized?: boolean; label: string; value: string }>) {
+}: Readonly<{ emphasized?: boolean; label: string; mono?: boolean; value: string }>) {
   return (
     <div className="grid gap-1 py-5 sm:grid-cols-[10rem_1fr] sm:items-baseline">
       <dt className="text-sm font-medium text-[var(--muted)]">{label}</dt>
-      <dd className={emphasized ? "text-2xl font-bold" : "font-semibold"}>
+      <dd
+        className={`${emphasized ? "text-2xl font-bold" : "font-semibold"} ${mono ? "break-all font-mono text-sm" : ""}`}
+      >
         {value}
       </dd>
     </div>
@@ -115,10 +121,7 @@ function ReceiptMessage({
     <div className="mx-auto max-w-2xl rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-8 sm:p-12">
       <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
       <p className="mt-3 text-[var(--muted)]">{message}</p>
-      <Link
-        href="/products"
-        className="mt-7 inline-block font-semibold text-[var(--accent)]"
-      >
+      <Link href="/products" className="mt-7 inline-block font-semibold text-[var(--accent)]">
         Return to catalog
       </Link>
     </div>

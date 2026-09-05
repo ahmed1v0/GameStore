@@ -11,6 +11,7 @@ import {
   type Product,
   type ProductInput,
 } from "@/lib/api/products";
+import { moneyInputStep } from "@/lib/money";
 
 export function AdminProductEditor({ product }: Readonly<{ product: Product }>) {
   const { session } = useAuth();
@@ -43,6 +44,9 @@ export function AdminProductEditor({ product }: Readonly<{ product: Product }>) 
       void queryClient.invalidateQueries({ queryKey: ["admin-products"] });
     },
   });
+
+  const selectedRegion = regions.data?.find((region) => region.code === form.location);
+  const priceStep = moneyInputStep(selectedRegion?.minor_unit ?? product.minor_unit);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,17 +84,22 @@ export function AdminProductEditor({ product }: Readonly<{ product: Product }>) 
         />
       </label>
       <label>
-        <span className="mb-2 block text-sm font-semibold">Price</span>
+        <span className="mb-2 block text-sm font-semibold">
+          Price{selectedRegion ? ` (${selectedRegion.currency_code})` : ` (${product.currency})`}
+        </span>
         <input
           className={inputClass}
           type="number"
           min="0"
-          step="0.01"
+          step={priceStep}
           inputMode="decimal"
           value={form.price}
           onChange={(event) => setForm({ ...form, price: event.target.value })}
           required
         />
+        <span className="mt-1.5 block text-xs text-[var(--muted)]">
+          Up to {selectedRegion?.minor_unit ?? product.minor_unit} decimal places.
+        </span>
       </label>
       <label>
         <span className="mb-2 block text-sm font-semibold">Location</span>
