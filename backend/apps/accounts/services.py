@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import secrets
+import smtplib
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -87,9 +88,18 @@ def deliver_email(subject, body, html, recipient):
         email = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
         email.attach_alternative(html, "text/html")
         email.send(fail_silently=False)
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.error(
+            "Account email delivery failed: SMTP authentication rejected (code %s).",
+            exc.smtp_code,
+        )
+    except smtplib.SMTPException as exc:
+        logger.error("Account email delivery failed: SMTP error (%s).", type(exc).__name__)
+    except OSError as exc:
+        logger.error("Account email delivery failed: network error (%s).", type(exc).__name__)
     except Exception:
-        # Do not log SMTP exception text: it can contain credentials or message content.
-        logger.error("Account email delivery failed; the user can request a resend.")
+        # Keep unexpected failures generic: exception text can expose credentials or message content.
+        logger.error("Account email delivery failed: unexpected email backend error.")
 
 
 def signup(attrs):
