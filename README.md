@@ -4,15 +4,19 @@
 
 Game Store is a monorepo containing a Django REST API and a Next.js client for
 browsing and purchasing region-specific digital game items. PostgreSQL stores
-the catalog, users, and immutable purchase receipts.
+the catalog, users, normalized region/currency reference data, and immutable
+purchase receipts.
 
 ## Features
 
 - CSV-backed product catalog for Jordan (`JO`) and Saudi Arabia (`SA`)
+- Normalized region and currency reference data (`JOD` / `SAR`)
+- Currency-aware monetary precision using ISO minor units
 - JWT-authenticated REST API
 - Signup with optional email verification, password recovery, secure refresh cookies, and admin/user management
 - Paginated and location-filtered product browsing
-- Single-product purchase flow with historical receipt snapshots
+- Idempotent single-product purchase flow with immutable historical receipt snapshots
+- Stable UUID transaction references for purchase receipts
 - Generated OpenAPI schema and Swagger UI
 - Responsive Next.js client
 
@@ -24,11 +28,11 @@ the catalog, users, and immutable purchase receipts.
 
 ## Architecture Overview
 
-The backend follows Django application boundaries: `catalog` owns products and
-CSV import, while `orders` owns purchases and receipts. Django ORM is used
-directly; only the purchase workflow has a dedicated service function. The
-frontend keeps HTTP access in `src/lib/api`, server state in TanStack Query, and
-route-specific UI in the App Router.
+The backend follows Django application boundaries: `catalog` owns products,
+regions, money validation, and CSV import, while `orders` owns purchases and
+immutable receipts. Django ORM is used directly; only the purchase workflow has
+a dedicated service function. The frontend keeps HTTP access in `src/lib/api`,
+server state in TanStack Query, and route-specific UI in the App Router.
 
 ## Repository Structure
 
@@ -42,7 +46,7 @@ docker-compose.yml
 
 ## Prerequisites
 
-- Python 3.13
+- Python 3.13 or 3.14
 - Node.js 22 or newer
 - Docker Desktop with Docker Compose
 
@@ -65,13 +69,23 @@ Press Ctrl+C to stop Django and Next.js. PostgreSQL stays running unless you add
 ```bash
 git clone <repository-url>
 cd assessment
+git checkout idempotency-key
 ```
 
 ### Environment Configuration
 
+PowerShell:
+
 ```powershell
 Copy-Item backend/.env.example backend/.env
 Copy-Item frontend/.env.example frontend/.env.local
+```
+
+Git Bash:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
 ```
 
 The checked-in examples contain local-only values. Change the Django secret in
@@ -79,7 +93,7 @@ any shared or deployed environment.
 
 ### Start PostgreSQL
 
-```powershell
+```bash
 docker compose up -d db
 docker compose ps
 ```
@@ -88,48 +102,146 @@ Continue once the `db` service reports `healthy`.
 
 ### Backend Setup
 
-```powershell
+Create the virtual environment from the repository root:
+
+```bash
 python -m venv .venv
+```
+
+#### PowerShell activation
+
+```powershell
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".\backend[dev]"
 ```
 
-### Database Migrations
+If PowerShell reports that running scripts is disabled, either enable activation
+for the current terminal only:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+or skip activation entirely and call the virtual environment Python directly:
+
+```powershell
+.\.venv\Scripts\python.exe --version
+.\.venv\Scripts\python.exe -m pip install -e ".\backend[dev]"
+```
+
+`-Scope Process` affects only the current PowerShell session and does not
+permanently change the machine execution policy.
+
+#### Git Bash activation
+
+From the repository root:
+
+```bash
+source .venv/Scripts/activate
+```
+
+From inside the `backend` directory:
+
+```bash
+source ../.venv/Scripts/activate
+```
+
+Git Bash uses `/` path separators. Do not use PowerShell paths such as
+`.\.venv\Scripts\python.exe` inside Git Bash.
+
+Install backend dependencies after activation:
+
+```bash
+python -m pip install -e "./backend[dev]"
+```
+
+If you prefer not to activate the environment, from the repository root you can
+run:
+
+```bash
+./.venv/Scripts/python.exe -m pip install -e "./backend[dev]"
+```
+
+## Database Migrations
+
+Migrations are committed to the repository. Normally you should **not** run
+`makemigrations` just to start the project.
+
+From the repository root:
+
+```bash
+python backend/manage.py showmigrations
 python backend/manage.py migrate
+python backend/manage.py check
 ```
 
-### CSV Import
+From inside `backend`:
+
+```bash
+python manage.py showmigrations
+python manage.py migrate
+python manage.py check
+```
+
+Without activating the virtual environment, from the repository root:
+
+PowerShell:
 
 ```powershell
+.\.venv\Scripts\python.exe backend\manage.py showmigrations
+.\.venv\Scripts\python.exe backend\manage.py migrate
+.\.venv\Scripts\python.exe backend\manage.py check
+```
+
+Git Bash:
+
+```bash
+./.venv/Scripts/python.exe backend/manage.py showmigrations
+./.venv/Scripts/python.exe backend/manage.py migrate
+./.venv/Scripts/python.exe backend/manage.py check
+```
+
+To inspect only the order migrations:
+
+```bash
+python backend/manage.py showmigrations orders
+```
+
+The fintech changes include the catalog region/currency migrations and the
+purchase receipt migration. Do not use `migrate --fake` unless you deliberately
+know the database schema already matches the migration state.
+
+## CSV Import
+
+```bash
 python backend/manage.py import_items data/items.csv
 ```
 
-### Seed Administrator
+The importer validates the complete file before writing and performs a bulk
+upsert using the CSV `id` as the stable product identifier. Re-importing updates
+existing products rather than duplicating them.
 
-```powershell
+## Seed Administrator
+
+```bash
 python backend/manage.py seed_admin --username admin --email admin@example.com --password P@ssw0rd
 ```
 
 The command is idempotent and updates the administrator password if the account already exists.
 
-### Start Backend
+## Start Backend
 
-```powershell
+```bash
 python backend/manage.py runserver
 ```
 
-### Frontend Setup
+The API runs at `http://localhost:8000` by default.
 
-```powershell
-Set-Location frontend
+## Frontend Setup
+
+```bash
+cd frontend
 npm ci
-```
-
-### Start Frontend
-
-```powershell
 npm run dev
 ```
 
@@ -139,13 +251,98 @@ VS Code users can select the `Full Stack` launch target after PostgreSQL is
 healthy and dependencies are installed. It starts both development servers with
 debugging enabled.
 
+## PostgreSQL Connection
+
+Local Docker Compose uses the following defaults:
+
+| Setting | Value |
+| --- | --- |
+| Host | `localhost` |
+| Port | `5432` |
+| Database | `assessment` |
+| Username | `assessment` |
+| Password | `assessment` |
+
+Connection string:
+
+```text
+postgresql://assessment:assessment@localhost:5432/assessment
+```
+
+These values come from `docker-compose.yml` and `backend/.env.example`. Override
+them with environment variables when needed.
+
+### Access PostgreSQL from the terminal
+
+Confirm the database container is running:
+
+```bash
+docker compose ps
+```
+
+Open `psql` inside the PostgreSQL container:
+
+```bash
+docker compose exec db psql -U assessment -d assessment
+```
+
+Useful `psql` commands:
+
+```text
+\dt
+\d catalog_product
+\d catalog_region
+\d orders_order
+\q
+```
+
+Example queries:
+
+```sql
+SELECT * FROM catalog_region;
+SELECT * FROM catalog_product ORDER BY id;
+SELECT * FROM orders_order ORDER BY created_at DESC;
+```
+
+To inspect the fintech receipt snapshot fields:
+
+```sql
+SELECT
+    id,
+    reference,
+    product_title,
+    unit_price,
+    currency_code,
+    currency_minor_unit,
+    product_location,
+    product_location_name,
+    created_at
+FROM orders_order
+ORDER BY created_at DESC;
+```
+
+### Access PostgreSQL with a GUI
+
+DBeaver, DataGrip, pgAdmin, or another PostgreSQL client can connect using:
+
+```text
+Host: localhost
+Port: 5432
+Database: assessment
+Username: assessment
+Password: assessment
+```
+
+DBeaver is a convenient option when inspecting tables, foreign keys, indexes,
+constraints, and query plans during the assessment.
+
 ## Environment Variables
 
 ### Backend
 
 | Variable | Purpose | Local default |
 | --- | --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string | Local Compose database |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://assessment:assessment@localhost:5432/assessment` |
 | `DJANGO_SECRET_KEY` | Django/JWT signing secret | Unsafe example value |
 | `DEBUG` | Django debug mode | `true` |
 | `ALLOWED_HOSTS` | Comma-separated hosts | `localhost,127.0.0.1` |
@@ -175,11 +372,11 @@ administrator. This file is ignored by Git and does not create an account.
 Both catalog and user lists paginate in SQL. See [page performance](docs/PERFORMANCE.md)
 for query budgets, cancellation, caching, index setup and scaling considerations.
 
-Email verification follows `EMAIL_VERIFICATION_ENABLED`. The example enables it,
-and this workspace's local environment is enabled. With console email, new signups
-follow the verification link printed by Django; with SMTP they receive text and HTML mail.
-Existing accounts retain access. Use `createsuperuser` to
-bootstrap the first administrator, then manage users at `/admin/users`.
+Email verification follows `EMAIL_VERIFICATION_ENABLED`. The example enables it.
+With console email, new signups follow the verification link printed by Django;
+with SMTP they receive text and HTML mail. Existing accounts retain access. Use
+`createsuperuser` or `seed_admin` to bootstrap the first administrator, then
+manage users at `/admin/users`.
 
 `POST /api/v1/auth/login` returns an access token and user, and sets an HttpOnly
 refresh cookie. Authentication POST requests require CSRF protection. Application
@@ -187,27 +384,53 @@ endpoints accept `Authorization: Bearer <token>` and deny unauthenticated reques
 by default. See [authentication setup and API contract](docs/AUTHENTICATION.md) for
 SMTP, migrations, session behavior, roles, throttling, and deployment configuration.
 
-## CSV Import
+## Purchase Idempotency and Fintech Data Integrity
 
-The management command validates the complete file inside a transaction and
-uses the CSV `id` as the stable product identifier. Re-importing a file updates
-existing products rather than duplicating them.
+`POST /api/v1/orders` requires a UUID `Idempotency-Key`. Retrying the same purchase
+with the same key returns the original receipt rather than creating a duplicate
+order. Reusing the same key for a different product is rejected.
+
+Receipts keep immutable snapshots of customer-visible commercial data, including
+product title, unit price, market, currency, currency minor unit, and a stable UUID
+transaction reference. Historical receipts therefore do not change when catalog
+or reference data is later edited.
+
+Money is represented using decimal values on the backend and exact minor-unit
+arithmetic on the frontend. JOD supports three fractional digits and SAR supports
+two. Mixed-currency cart totals are kept separate rather than being added together.
+
+See [purchase idempotency](docs/PURCHASE_IDEMPOTENCY.md) for implementation details.
 
 ## Running Tests
 
-```powershell
-Set-Location backend
+Backend:
+
+```bash
+cd backend
 pytest
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm test
 ```
 
 ## Code Quality
 
-```powershell
-Set-Location backend
+Backend:
+
+```bash
+cd backend
 ruff check .
 ruff format --check .
+```
 
-Set-Location ../frontend
+Frontend:
+
+```bash
+cd frontend
 npm run lint
 npm run typecheck
 npm run build
@@ -222,9 +445,11 @@ trade-offs behind each meaningful choice.
 ## Assumptions
 
 - Products are digital and have no inventory limit.
-- Each purchase creates one order for one product.
-- Prices use two decimal places and a single unspecified settlement currency.
+- Each purchase intent creates one order for one product.
 - Product IDs in the source CSV are stable external identifiers.
+- Supported local markets are currently Jordan and Saudi Arabia.
+- JOD uses three fractional digits; SAR uses two.
+- The cart is a client-side saved selection, not a payment settlement or reservation system.
 - The prompt did not include product rows, so `data/items.csv` contains representative
   fictional assessment data matching the required schema and locations.
 
@@ -236,6 +461,8 @@ trade-offs behind each meaningful choice.
   retried through the resend/recovery forms.
 - Local development runs only PostgreSQL in Docker; application processes run on
   the host for faster feedback.
+- Currency metadata is modeled explicitly so price validation and receipts remain
+  deterministic without introducing a full payments or FX subsystem.
 
 ## Future Improvements
 

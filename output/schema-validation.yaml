@@ -158,13 +158,8 @@ paths:
           description: CSRF validation failed or administrator permission is required.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
-      parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+      description: Browser clients require X-CSRFToken from GET /api/v1/auth/csrf.
+        Swagger UI injects it automatically.
   /api/v1/auth/csrf:
     get:
       operationId: v1_auth_csrf_retrieve
@@ -190,9 +185,10 @@ paths:
   /api/v1/auth/forgot-password:
     post:
       operationId: v1_auth_forgot_password_create
-      description: Returns an account-independent acknowledgment. Requires X-CSRFToken.
-        Verification requests do not send email when EMAIL_VERIFICATION_ENABLED is
-        false.
+      description: |-
+        Returns an account-independent acknowledgment. Requires X-CSRFToken. Verification requests do not send email when EMAIL_VERIFICATION_ENABLED is false.
+
+        Browser clients require X-CSRFToken from GET /api/v1/auth/csrf. Swagger UI injects it automatically.
       tags:
       - v1
       requestBody:
@@ -223,18 +219,13 @@ paths:
           description: CSRF validation failed or administrator permission is required.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
-      parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
   /api/v1/auth/login:
     post:
       operationId: v1_auth_login_create
-      description: Returns an access token and user. Sets an HttpOnly refresh cookie.
-        Requires X-CSRFToken.
+      description: |-
+        Returns an access token and user. Sets an HttpOnly refresh cookie. Requires X-CSRFToken.
+
+        Browser clients require X-CSRFToken from GET /api/v1/auth/csrf. Swagger UI injects it automatically.
       tags:
       - v1
       requestBody:
@@ -269,18 +260,13 @@ paths:
           description: CSRF validation failed or administrator permission is required.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
-      parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
   /api/v1/auth/logout:
     post:
       operationId: v1_auth_logout_create
-      description: Requires X-CSRFToken. Revokes the refresh cookie; access expires
-        within five minutes.
+      description: |-
+        Requires X-CSRFToken. Revokes the refresh cookie; access expires within five minutes.
+
+        Browser clients require X-CSRFToken from GET /api/v1/auth/csrf. Swagger UI injects it automatically.
       tags:
       - v1
       responses:
@@ -300,12 +286,6 @@ paths:
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
       parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
       - name: game_store_refresh
         in: cookie
         required: false
@@ -338,8 +318,10 @@ paths:
   /api/v1/auth/refresh:
     post:
       operationId: v1_auth_refresh_create
-      description: Requires refresh cookie and X-CSRFToken. Rotates and blacklists
-        the old refresh token.
+      description: |-
+        Requires refresh cookie and X-CSRFToken. Rotates and blacklists the old refresh token.
+
+        Browser clients require X-CSRFToken from GET /api/v1/auth/csrf. Swagger UI injects it automatically.
       tags:
       - v1
       responses:
@@ -363,12 +345,6 @@ paths:
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
       parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
       - name: game_store_refresh
         in: cookie
         required: true
@@ -378,9 +354,10 @@ paths:
   /api/v1/auth/resend-verification:
     post:
       operationId: v1_auth_resend_verification_create
-      description: Returns an account-independent acknowledgment. Requires X-CSRFToken.
-        Verification requests do not send email when EMAIL_VERIFICATION_ENABLED is
-        false.
+      description: |-
+        Returns an account-independent acknowledgment. Requires X-CSRFToken. Verification requests do not send email when EMAIL_VERIFICATION_ENABLED is false.
+
+        Browser clients require X-CSRFToken from GET /api/v1/auth/csrf. Swagger UI injects it automatically.
       tags:
       - v1
       requestBody:
@@ -411,13 +388,6 @@ paths:
           description: CSRF validation failed or administrator permission is required.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
-      parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
   /api/v1/auth/reset-password:
     post:
       operationId: v1_auth_reset_password_create
@@ -451,17 +421,15 @@ paths:
           description: CSRF validation failed or administrator permission is required.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
-      parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+      description: Browser clients require X-CSRFToken from GET /api/v1/auth/csrf.
+        Swagger UI injects it automatically.
   /api/v1/auth/signup:
     post:
       operationId: v1_auth_signup_create
-      description: Creates an ordinary user. Verification is controlled by EMAIL_VERIFICATION_ENABLED.
+      description: |-
+        Creates an ordinary user. Verification is controlled by EMAIL_VERIFICATION_ENABLED.
+
+        Browser clients require X-CSRFToken from GET /api/v1/auth/csrf. Swagger UI injects it automatically.
       tags:
       - v1
       requestBody:
@@ -492,13 +460,6 @@ paths:
           description: CSRF validation failed or administrator permission is required.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
-      parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
   /api/v1/auth/verify-email:
     post:
       operationId: v1_auth_verify_email_create
@@ -532,19 +493,26 @@ paths:
           description: CSRF validation failed or administrator permission is required.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
-      parameters:
-      - name: X-CSRFToken
-        in: header
-        required: true
-        schema:
-          type: string
-        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+      description: Browser clients require X-CSRFToken from GET /api/v1/auth/csrf.
+        Swagger UI injects it automatically.
   /api/v1/orders:
     post:
       operationId: v1_orders_create
       description: Create an order for the authenticated user and snapshot the product
-        values used by the receipt.
+        values used by the receipt. Requires a UUID Idempotency-Key scoped to the
+        authenticated user. Repeating the same key and product returns the original
+        receipt and 201, without creating an order. Reusing a key for another product
+        returns 409. Keys do not expire. Idempotency-Replayed is true for replays
+        and false for new orders.
       summary: Purchase one product
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          format: uuid
+        description: Generate once per purchase intent; reuse on every retry.
+        required: true
       tags:
       - v1
       requestBody:
@@ -563,6 +531,11 @@ paths:
       - jwtAuth: []
       responses:
         '201':
+          headers:
+            Idempotency-Replayed:
+              schema:
+                type: boolean
+              description: Whether the original receipt was replayed.
           content:
             application/json:
               schema:
@@ -574,6 +547,8 @@ paths:
           description: A valid access token is required.
         '404':
           description: The product does not exist.
+        '409':
+          description: The key was already used for a different product.
   /api/v1/orders/{id}:
     get:
       operationId: v1_orders_retrieve

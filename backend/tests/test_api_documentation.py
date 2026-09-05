@@ -38,6 +38,11 @@ def test_schema_is_public_and_contains_application_contract(api_client: APIClien
     assert "/api/v1/products/{id}" in paths
     assert "/api/v1/orders" in paths
     assert "/api/v1/orders/{id}" in paths
+    purchase = paths["/api/v1/orders"]["post"]
+    key = next(item for item in purchase["parameters"] if item["name"] == "Idempotency-Key")
+    assert key["required"] and key["in"] == "header"
+    assert key["schema"]["format"] == "uuid"
+    assert "409" in purchase["responses"]
     assert "jwtAuth" in response.data["components"]["securitySchemes"]
 
     product_parameters = paths["/api/v1/products"]["get"]["parameters"]

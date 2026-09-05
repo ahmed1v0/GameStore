@@ -15,6 +15,11 @@ vi.mock("@/features/auth/auth-provider", () => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 const fetcher = vi.fn();
 const clients: QueryClient[] = [];
+const regionLookup = [
+  { code: "JO", name: "Jordan", currency_code: "JOD", minor_unit: 3 },
+  { code: "SA", name: "Saudi Arabia", currency_code: "SAR", minor_unit: 2 },
+];
+
 beforeEach(() => {
   fetcher.mockReset();
   vi.stubGlobal("fetch", fetcher);
@@ -34,12 +39,16 @@ function mount(component: React.ReactNode) {
   );
 }
 function product(id: number, location = "JO") {
+  const jordan = location === "JO";
   return {
     id,
     title: `Item ${id}`,
     description: "Digital item",
-    price: "10.00",
+    price: jordan ? "10.000" : "10.00",
     location,
+    location_name: jordan ? "Jordan" : "Saudi Arabia",
+    currency: jordan ? "JOD" : "SAR",
+    minor_unit: jordan ? 3 : 2,
     created_at: "2026-09-05",
     updated_at: "2026-09-05",
   };
@@ -61,9 +70,16 @@ function account(id: number) {
 function json(value: unknown) {
   return new Response(JSON.stringify(value), { status: 200 });
 }
+function isRegionsRequest(url: string) {
+  return new URL(url).pathname.endsWith("/regions");
+}
+function productRequests() {
+  return fetcher.mock.calls.filter(([url]) => new URL(url).pathname.endsWith("/products"));
+}
 
 it("requests only the selected catalog page and reuses fresh cached pages", async () => {
   fetcher.mockImplementation(async (url: string) => {
+    if (isRegionsRequest(url)) return json(regionLookup);
     const query = new URL(url).searchParams;
     expect(query.get("page_size")).toBe("12");
     return json(
@@ -88,18 +104,20 @@ it("requests only the selected catalog page and reuses fresh cached pages", asyn
   await userEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("Item 13");
   expect(screen.queryByText("Item 1")).not.toBeInTheDocument();
-  expect(new URL(fetcher.mock.calls[1][0]).searchParams.get("page")).toBe("2");
+  expect(new URL(productRequests()[1][0]).searchParams.get("page")).toBe("2");
   await userEvent.click(screen.getByRole("button", { name: "Previous" }));
   await screen.findByText("Item 1");
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(productRequests()).toHaveLength(2);
 });
 
 it("cancels superseded filters and never displays a late response for another region", async () => {
   let finishOld!: (response: Response) => void;
   let oldSignal!: AbortSignal;
   fetcher.mockImplementation((url: string, init: RequestInit) => {
+    if (isRegionsRequest(url)) return Promise.resolve(json(regionLookup));
     const query = new URL(url).searchParams;
-    if (query.get("location") === "JO") {
+    const location = query.get("location");
+    if (location === "JO") {
       oldSignal = init.signal!;
       return new Promise<Response>((resolve) => {
         finishOld = resolve;
@@ -111,7 +129,7 @@ it("cancels superseded filters and never displays a late response for another re
         count: 1,
         next: null,
         previous: null,
-        results: [product(query.get("location") === "SA" ? 200 : 1, "SA")],
+        results: [product(location === "SA" ? 200 : 1, location === "SA" ? "SA" : "JO")],
       }),
     );
   });

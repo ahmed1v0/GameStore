@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 from .email import default_from_email, normalize_smtp_password
@@ -111,7 +112,8 @@ SIMPLE_JWT = {
 }
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ["Retry-After"]
+CORS_ALLOW_HEADERS = [*default_headers, "idempotency-key"]
+CORS_EXPOSE_HEADERS = ["Retry-After", "Idempotency-Replayed"]
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("CSRF_TRUSTED_ORIGINS", ",".join(CORS_ALLOWED_ORIGINS)).split(",")
