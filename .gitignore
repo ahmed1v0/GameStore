@@ -25,3 +25,6 @@ frontend/dist/
 .DS_Store
 # Local administrator login notes
 /ADMIN_CREDENTIALS.local.md
+/secret.md
+/docs/*
+/output/*

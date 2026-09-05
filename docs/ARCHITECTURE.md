@@ -1,5 +1,17 @@
 # Architecture
 
+Email verification is configurable through `EMAIL_VERIFICATION_ENABLED` and disabled
+by default. The API exposes the effective policy to signup and account screens.
+Skipping verification does not mark an email verified or bypass account deactivation.
+
+The `accounts` app extends Django's existing User model with verification and session
+metadata, one-use email tokens, and immutable administration audit records. Account
+services own transactional signup, token consumption and user management. JWT access
+authentication checks current account eligibility; refresh cookies rotate under a user
+row lock. The Next.js session store coordinates refresh and identity changes, while
+TanStack Query caches are cleared between accounts. See `AUTHENTICATION.md` for the
+complete contract and deployment assumptions.
+
 ## System Overview
 
 Game Store is a small monorepo with a browser client, a REST API, and PostgreSQL.

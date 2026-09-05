@@ -140,7 +140,9 @@ The independent browser client must authenticate API requests.
 
 ### Decision
 
-Issue SimpleJWT access and refresh tokens from `/api/v1/auth/login`.
+Issue a SimpleJWT access token and current user from `/api/v1/auth/login`, with the
+refresh token in an HttpOnly cookie. Rotate/blacklist refresh tokens and validate
+account status and session version against the database. See `AUTHENTICATION.md`.
 
 ### Reason
 
@@ -152,7 +154,8 @@ Django sessions and opaque API tokens.
 
 ### Trade-offs
 
-Browser token storage requires careful XSS risk management.
+The browser uses in-memory access tokens and CSRF-protected refresh cookies. JWTs
+are no longer fully stateless: immediate account revocation requires database checks.
 
 ## ADR-008 — No payment gateway or inventory management
 

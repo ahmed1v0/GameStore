@@ -1,5 +1,9 @@
 # Testing Strategy
 
+Verification tests cover both settings: immediate signup/login, pending-account
+access and refresh, retained exemptions, disabled-account rejection, and password recovery.
+UI tests cover hidden verification actions and configuration errors.
+
 ## Goals
 
 Tests protect observable API behavior, database invariants, import atomicity, and
@@ -7,10 +11,18 @@ the complete user journey without testing Django or React internals.
 
 ## Backend Tests
 
+`test_performance.py` asserts SQL pagination and bounded query counts for list,
+detail, receipt and identity reads, including real JWT authentication. The frontend
+pagination tests verify server page/search requests, cancellation and cached revisits.
+
 ### Authentication
 
-Valid credentials return tokens, invalid credentials return 401, and protected
-resources reject requests without a valid access token.
+Tests cover verified signup, validation and database email uniqueness, expiry/replay
+of email tokens, generic recovery acknowledgments, CSRF rejection, cookie flags,
+refresh rotation, password/session invalidation, deactivation/reactivation, role
+authorization, superuser/self-protection, audit records, throttles and email failures.
+PostgreSQL concurrency tests exercise signup, refresh and competing admin demotions.
+Migration tests verify existing-account exemptions and duplicate-email failure safety.
 
 ### Products
 
@@ -40,9 +52,12 @@ malformed rows, and rollback without partial writes.
 
 ## Frontend Tests
 
-Static quality gates are TypeScript strict mode, ESLint, and the production Next.js
-build. The highest-value future component tests are auth redirect, catalog states,
-pagination/filter interactions, duplicate-purchase prevention, and receipt output.
+Vitest and Testing Library cover session restoration, one shared refresh, browser-lock
+usage, logout races, failed logout, request cancellation, stale identity responses,
+cache isolation, purchase non-retry on network failure, role loss, auth forms, and
+admin route guards. Resend verification is tested for initial signup/login, successful
+signup, unverified login, missing/expired links, successful verification, and the
+resend page itself. TypeScript, ESLint and the production Next.js build also run.
 
 ## Integration Scenarios
 
@@ -60,6 +75,11 @@ receipt retrieval, and the Next.js redirect flow.
 - Buy is disabled while a purchase is pending.
 - Receipt values match the order snapshot.
 - Swagger authorizes requests with an access token.
+- Signup shows resend only after account creation succeeds.
+- Unverified login shows resend next to its error, while incorrect credentials do not.
+- Verification and recovery links show invalid/expired states and a way to request another.
+- Reload restores the cookie session and sign-out clears the account across tabs.
+- Admin user search, role/status controls and self-protection render correctly.
 
 ## Running Tests
 
@@ -70,6 +90,7 @@ ruff check .
 ruff format --check .
 
 Set-Location ../frontend
+npm test
 npm run lint
 npm run typecheck
 npm run build
