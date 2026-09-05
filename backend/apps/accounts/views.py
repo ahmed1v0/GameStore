@@ -223,6 +223,10 @@ class EmailRequestView(AuthView):
         )
         if user and user.has_usable_password():
             services.send_account_email(user, self.purpose)
+        else:
+            services.logger.info(
+                "Account email request skipped: no active account with a usable password matches."
+            )
         return Response({"detail": services.GENERIC_EMAIL_MESSAGE})
 
 

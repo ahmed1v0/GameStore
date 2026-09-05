@@ -386,6 +386,45 @@ def test_delivery_failure_is_generic_and_does_not_log_secrets(api_client, post, 
     assert "secret SMTP password" not in caplog.text
 
 
+def test_resend_logs_backend_acceptance_without_address_or_token(api_client, post, account, caplog):
+    response = post(api_client, "auth/resend-verification", {"email": account.email})
+    assert response.status_code == 200
+    assert len(mail.outbox) == 1
+    assert "Account email accepted" in caplog.text
+    assert account.email not in caplog.text
+    assert token_from_email() not in caplog.text
+
+
+def test_resend_logs_missing_account_without_disclosing_it(api_client, post, caplog):
+    response = post(api_client, "auth/resend-verification", {"email": "absent@example.com"})
+    assert response.data == {"detail": services.GENERIC_EMAIL_MESSAGE}
+    assert not mail.outbox
+    assert "no active account" in caplog.text
+    assert "absent@example.com" not in caplog.text
+
+
+def test_resend_logs_zero_messages_as_failure(api_client, post, account, caplog):
+    with patch("django.core.mail.EmailMultiAlternatives.send", return_value=0):
+        response = post(api_client, "auth/resend-verification", {"email": account.email})
+    assert response.data == {"detail": services.GENERIC_EMAIL_MESSAGE}
+    assert "backend accepted no message" in caplog.text
+    assert "Account email accepted" not in caplog.text
+
+
+def test_browser_can_read_email_throttle_cooldown(api_client, post, account):
+    for _ in range(3):
+        post(api_client, "auth/resend-verification", {"email": account.email})
+    response = post(
+        api_client,
+        "auth/resend-verification",
+        {"email": account.email},
+        HTTP_ORIGIN="http://localhost:3000",
+    )
+    assert response.status_code == 429
+    assert int(response["Retry-After"]) > 0
+    assert "Retry-After" in response["Access-Control-Expose-Headers"]
+
+
 def test_users_cannot_manage_roles(account, api_client):
     client = authorized(account)
     assert api_client.get("/api/v1/admin/users").status_code == 401

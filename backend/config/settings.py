@@ -111,6 +111,7 @@ SIMPLE_JWT = {
 }
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ["Retry-After"]
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.getenv("CSRF_TRUSTED_ORIGINS", ",".join(CORS_ALLOWED_ORIGINS)).split(",")
@@ -144,6 +145,20 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "").strip() or default_from
 EMAIL_VERIFICATION_TIMEOUT = int(os.getenv("EMAIL_VERIFICATION_TIMEOUT", "86400"))
 EMAIL_VERIFICATION_ENABLED = os.getenv("EMAIL_VERIFICATION_ENABLED", "false").lower() == "true"
 PASSWORD_RESET_TIMEOUT = int(os.getenv("PASSWORD_RESET_TIMEOUT", "3600"))
+
+# Account email diagnostics deliberately exclude addresses, credentials and link tokens.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"account_console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "apps.accounts.services": {
+            "handlers": ["account_console"],
+            "level": "INFO",
+            "propagate": True,
+        }
+    },
+}
 
 # Configure a shared Redis cache for consistent throttling across deployed workers.
 if os.getenv("CACHE_URL"):

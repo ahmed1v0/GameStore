@@ -48,6 +48,18 @@ docker-compose.yml
 
 ## Quick Start
 
+For an existing checkout with dependencies installed, start PostgreSQL, apply migrations,
+and run both applications from one PowerShell terminal:
+
+```powershell
+.\run-all.ps1
+```
+
+Use `.\run-all.ps1 -Install` for the first setup and `-OpenBrowser` to open the app.
+Press Ctrl+C to stop Django and Next.js. PostgreSQL stays running unless you add
+`-StopDatabaseOnExit`. Use `-SkipDocker` when PostgreSQL is managed separately, or
+`-CheckOnly` to validate prerequisites without starting services.
+
 ### Clone Repository
 
 ```bash

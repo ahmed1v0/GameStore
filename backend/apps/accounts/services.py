@@ -28,6 +28,7 @@ def fingerprint(password):
 
 def send_account_email(user, purpose, *, invitation=False):
     if purpose == EmailToken.Purpose.VERIFY and not settings.EMAIL_VERIFICATION_ENABLED:
+        logger.info("Account email skipped: verification is disabled.")
         return
     if invitation and purpose != EmailToken.Purpose.RESET:
         raise ValueError("Invitations must use a password-setup token.")
@@ -36,8 +37,10 @@ def send_account_email(user, purpose, *, invitation=False):
     with transaction.atomic():
         user = get_user_model().objects.select_for_update().get(pk=user.pk)
         if not user.is_active or not user.email:
+            logger.info("Account email skipped: account is inactive or has no email.")
             return
         if purpose == EmailToken.Purpose.VERIFY and user.security.email_verified_at:
+            logger.info("Account email skipped: email is already verified.")
             return
 
         raw = secrets.token_urlsafe(32)
@@ -87,7 +90,11 @@ def deliver_email(subject, body, html, recipient):
     try:
         email = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
         email.attach_alternative(html, "text/html")
-        email.send(fail_silently=False)
+        sent = email.send(fail_silently=False)
+        if sent != 1:
+            logger.error("Account email delivery failed: email backend accepted no message.")
+            return
+        logger.info("Account email accepted by configured backend (%s).", settings.EMAIL_BACKEND)
     except smtplib.SMTPAuthenticationError as exc:
         logger.error(
             "Account email delivery failed: SMTP authentication rejected (code %s).",
@@ -98,7 +105,7 @@ def deliver_email(subject, body, html, recipient):
     except OSError as exc:
         logger.error("Account email delivery failed: network error (%s).", type(exc).__name__)
     except Exception:
-        # Keep unexpected failures generic: exception text can expose credentials or message content.
+        # Keep unexpected failures generic: exception text can expose secrets.
         logger.error("Account email delivery failed: unexpected email backend error.")
 
 
