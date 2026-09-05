@@ -32,6 +32,10 @@ def backfill_receipt_metadata(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    # PostgreSQL can't ALTER a table while deferred trigger events from the
+    # receipt metadata backfill are still pending in the same transaction.
+    # Let each operation commit before the following schema change instead.
+    atomic = False
 
     dependencies = [
         ("catalog", "0006_currency_minor_units"),
