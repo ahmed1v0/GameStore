@@ -38,12 +38,13 @@ def product_factory() -> Callable[..., Product]:
 
     def create_product(**overrides: Any) -> Product:
         nonlocal next_id
+        location = overrides.pop("location", Product.Location.JORDAN)
         values = {
             "id": next_id,
             "title": f"Product {next_id}",
             "description": "A digital game item.",
             "price": Decimal("10.00"),
-            "location": Product.Location.JORDAN,
+            "location_id": location,
         }
         values.update(overrides)
         next_id = max(next_id + 1, int(values["id"]) + 1)

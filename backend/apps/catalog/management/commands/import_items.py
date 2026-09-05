@@ -20,18 +20,23 @@ class Command(BaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         csv_path: Path = options["csv_path"]
-        products = self._read_and_validate(csv_path)
+        product_data = self._read_and_validate(csv_path)
+        products = [Product(**values) for values in product_data]
+        product_ids = [product.id for product in products]
 
-        created_count = 0
         with transaction.atomic():
-            for product_data in products:
-                _, created = Product.objects.update_or_create(
-                    id=product_data.pop("id"),
-                    defaults=product_data,
-                )
-                created_count += int(created)
+            existing_ids = set(
+                Product.objects.filter(pk__in=product_ids).values_list("id", flat=True)
+            )
+            Product.objects.bulk_create(
+                products,
+                update_conflicts=True,
+                update_fields=["title", "description", "price", "location", "updated_at"],
+                unique_fields=["id"],
+            )
 
-        updated_count = len(products) - created_count
+        created_count = len(products) - len(existing_ids)
+        updated_count = len(existing_ids)
         self.stdout.write(
             self.style.SUCCESS(
                 f"Imported {len(products)} products "
@@ -99,7 +104,7 @@ class Command(BaseCommand):
             title=values["title"],
             description=values["description"],
             price=price,
-            location=values["location"].upper(),
+            location_id=values["location"].upper(),
         )
         try:
             product.full_clean(validate_unique=False)
@@ -112,5 +117,5 @@ class Command(BaseCommand):
             "title": product.title,
             "description": product.description,
             "price": product.price,
-            "location": product.location,
+            "location_id": product.location_id,
         }

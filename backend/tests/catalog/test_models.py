@@ -14,15 +14,16 @@ def test_product_accepts_supported_location() -> None:
         title="Jordan Pack",
         description="A regional digital item.",
         price=Decimal("10.00"),
-        location=Product.Location.JORDAN,
+        location_id=Product.Location.JORDAN,
     )
 
-    assert product.location == "JO"
+    assert product.location_id == "JO"
+    assert product.location.currency_code == "JOD"
 
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("price", Decimal("-0.01")), ("location", "US")],
+    [("price", Decimal("-0.01")), ("location_id", "US")],
 )
 def test_database_rejects_invalid_product_invariants(field: str, value: object) -> None:
     values = {
@@ -30,7 +31,7 @@ def test_database_rejects_invalid_product_invariants(field: str, value: object) 
         "title": "Invalid product",
         "description": "This record should not persist.",
         "price": Decimal("10.00"),
-        "location": "JO",
+        "location_id": "JO",
     }
     values[field] = value
 

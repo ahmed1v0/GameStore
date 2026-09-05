@@ -68,7 +68,7 @@ def test_receipt_snapshots_survive_product_changes(
 
     product.title = "Changed title"
     product.price = Decimal("20.00")
-    product.location = "JO"
+    product.location_id = "JO"
     product.save()
 
     receipt = authenticated_client.get(reverse("order-detail", args=[order_id]))
@@ -121,7 +121,7 @@ def test_user_cannot_read_another_users_receipt(
         product=product,
         product_title=product.title,
         unit_price=product.price,
-        product_location=product.location,
+        product_location=product.location_id,
     )
 
     response = authenticated_client.get(reverse("order-detail", args=[order.id]))

@@ -6,18 +6,9 @@ import { useState, type FormEvent } from "react";
 
 import { useAuth } from "@/features/auth/auth-provider";
 import { buttonClass, inputClass } from "@/features/auth/auth-form";
-import {
-  createProduct,
-  getProducts,
-  type ProductInput,
-  type ProductLocation,
-} from "@/lib/api/products";
+import { createProduct, getProducts, getRegions, type ProductInput } from "@/lib/api/products";
 
 const PAGE_SIZE = 10;
-const locationNames: Record<ProductLocation, string> = {
-  JO: "Jordan",
-  SA: "Saudi Arabia",
-};
 
 const emptyProduct: ProductInput = {
   title: "",
@@ -32,6 +23,13 @@ export function AdminProducts() {
   const [form, setForm] = useState<ProductInput>(emptyProduct);
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState<string | null>(null);
+
+  const regions = useQuery({
+    queryKey: ["regions", session?.user.id],
+    queryFn: ({ signal }) => getRegions(session!.access, signal),
+    enabled: Boolean(session),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const products = useQuery({
     queryKey: ["admin-products", session?.user.id, page, PAGE_SIZE],
@@ -112,7 +110,7 @@ export function AdminProducts() {
             className={inputClass}
             type="number"
             min="0"
-            step="0.01"
+            step="0.001"
             inputMode="decimal"
             value={form.price}
             onChange={(event) => setForm({ ...form, price: event.target.value })}
@@ -124,12 +122,16 @@ export function AdminProducts() {
           <select
             className={inputClass}
             value={form.location}
+            disabled={regions.isPending || regions.isError}
             onChange={(event) =>
               setForm({ ...form, location: event.target.value as ProductInput["location"] })
             }
           >
-            <option value="JO">Jordan</option>
-            <option value="SA">Saudi Arabia</option>
+            {regions.data?.map((region) => (
+              <option key={region.code} value={region.code}>
+                {region.name} · {region.currency_code}
+              </option>
+            ))}
           </select>
         </label>
         <label className="sm:col-span-2">
@@ -142,12 +144,17 @@ export function AdminProducts() {
           />
         </label>
         <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-          <button className={buttonClass} disabled={mutation.isPending}>
+          <button className={buttonClass} disabled={mutation.isPending || regions.isError}>
             {mutation.isPending ? "Adding…" : "Add product"}
           </button>
           {message && (
             <p role="status" className="text-sm font-semibold text-[var(--accent)]">
               {message}
+            </p>
+          )}
+          {regions.isError && (
+            <p role="alert" className="text-sm text-[var(--danger)]">
+              Region reference data could not be loaded.
             </p>
           )}
           {mutation.error && (
@@ -193,7 +200,7 @@ export function AdminProducts() {
         ) : (
           <>
             <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-              <div className="hidden grid-cols-[minmax(0,1fr)_10rem_9rem_6rem] gap-4 border-b border-[var(--border)] bg-white/[0.025] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)] md:grid">
+              <div className="hidden grid-cols-[minmax(0,1fr)_10rem_10rem_6rem] gap-4 border-b border-[var(--border)] bg-white/[0.025] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)] md:grid">
                 <span>Item</span>
                 <span>Location</span>
                 <span>Price</span>
@@ -202,16 +209,16 @@ export function AdminProducts() {
               {products.data.results.map((product) => (
                 <div
                   key={product.id}
-                  className="grid gap-3 border-b border-[var(--border)] px-5 py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_10rem_9rem_6rem] md:items-center md:gap-4"
+                  className="grid gap-3 border-b border-[var(--border)] px-5 py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_10rem_10rem_6rem] md:items-center md:gap-4"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-semibold">{product.title}</p>
                     <p className="mt-1 text-xs text-[var(--muted)]">Item #{product.id}</p>
                   </div>
-                  <span className="text-sm text-[var(--muted)]">
-                    {locationNames[product.location]}
+                  <span className="text-sm text-[var(--muted)]">{product.location_name}</span>
+                  <span className="font-mono text-sm font-semibold">
+                    {product.price} {product.currency}
                   </span>
-                  <span className="font-mono text-sm font-semibold">{product.price}</span>
                   <Link
                     href={`/products/${product.id}`}
                     className="justify-self-start rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold transition hover:border-[var(--border-strong)] hover:text-white md:justify-self-end"

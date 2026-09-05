@@ -25,7 +25,7 @@ def purchase_product(
             raise IdempotencyConflict()
         return existing, False
 
-    product = get_object_or_404(Product, pk=product_id)
+    product = get_object_or_404(Product.objects.select_related("location"), pk=product_id)
     # The unique database constraint arbitrates simultaneous requests across workers.
     # get_or_create recovers from a competing insert and returns its committed receipt.
     order, created = Order.objects.get_or_create(
@@ -35,7 +35,7 @@ def purchase_product(
             "product": product,
             "product_title": product.title,
             "unit_price": product.price,
-            "product_location": product.location,
+            "product_location": product.location_id,
         },
     )
     if order.product_id != product_id:
