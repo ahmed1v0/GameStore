@@ -104,3 +104,11 @@ export function updateProduct(
     init: { method: "PATCH", body: JSON.stringify(changes) },
   });
 }
+
+export function deleteProduct(productId: number, accessToken: string): Promise<null> {
+  return apiRequest(`/products/${productId}`, {
+    schema: z.null(),
+    accessToken,
+    init: { method: "DELETE" },
+  });
+}

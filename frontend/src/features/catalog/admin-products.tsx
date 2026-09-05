@@ -6,7 +6,13 @@ import { useState, type FormEvent } from "react";
 
 import { useAuth } from "@/features/auth/auth-provider";
 import { buttonClass, inputClass } from "@/features/auth/auth-form";
-import { createProduct, getProducts, getRegions, type ProductInput } from "@/lib/api/products";
+import {
+  createProduct,
+  deleteProduct,
+  getProducts,
+  getRegions,
+  type ProductInput,
+} from "@/lib/api/products";
 import { formatMoney, moneyInputStep } from "@/lib/money";
 
 const PAGE_SIZE = 10;
@@ -23,7 +29,8 @@ export function AdminProducts() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ProductInput>(emptyProduct);
   const [page, setPage] = useState(1);
-  const [message, setMessage] = useState<string | null>(null);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [catalogMessage, setCatalogMessage] = useState<string | null>(null);
 
   const regions = useQuery({
     queryKey: ["regions", session?.user.id],
@@ -46,14 +53,30 @@ export function AdminProducts() {
     placeholderData: keepPreviousData,
   });
 
-  const mutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: () => createProduct(session!.access, form),
     onSuccess: () => {
-      setMessage("Product added.");
+      setCreateMessage("Product added.");
       setForm(emptyProduct);
       setPage(1);
       void queryClient.invalidateQueries({ queryKey: ["products"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (productId: number) => deleteProduct(productId, session!.access),
+    onSuccess: (_result, productId) => {
+      setCatalogMessage("Product deleted.");
+      void queryClient.removeQueries({ queryKey: ["product"] });
+      void queryClient.invalidateQueries({ queryKey: ["products"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-products"] });
+
+      if (products.data?.results.length === 1 && page > 1) {
+        setPage((current) => Math.max(1, current - 1));
+      }
+
+      queryClient.setQueryData(["deleted-product", productId], true);
     },
   });
 
@@ -62,8 +85,18 @@ export function AdminProducts() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage(null);
-    mutation.mutate();
+    setCreateMessage(null);
+    createMutation.mutate();
+  }
+
+  function confirmDelete(productId: number, title: string) {
+    const confirmed = window.confirm(
+      `Delete “${title}”? This action cannot be undone. Products with purchase history are protected.`,
+    );
+    if (!confirmed) return;
+
+    setCatalogMessage(null);
+    deleteMutation.mutate(productId);
   }
 
   return (
@@ -155,12 +188,12 @@ export function AdminProducts() {
           />
         </label>
         <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-          <button className={buttonClass} disabled={mutation.isPending || regions.isError}>
-            {mutation.isPending ? "Adding…" : "Add product"}
+          <button className={buttonClass} disabled={createMutation.isPending || regions.isError}>
+            {createMutation.isPending ? "Adding…" : "Add product"}
           </button>
-          {message && (
+          {createMessage && (
             <p role="status" className="text-sm font-semibold text-[var(--accent)]">
-              {message}
+              {createMessage}
             </p>
           )}
           {regions.isError && (
@@ -168,9 +201,9 @@ export function AdminProducts() {
               Region reference data could not be loaded.
             </p>
           )}
-          {mutation.error && (
+          {createMutation.error && (
             <p role="alert" className="text-sm text-[var(--danger)]">
-              {mutation.error.message}
+              {createMutation.error.message}
             </p>
           )}
         </div>
@@ -181,7 +214,7 @@ export function AdminProducts() {
           <div>
             <h2 className="text-xl font-bold">Product list</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              Select an item to review or edit its details.
+              Edit items or remove products that have no purchase history.
             </p>
           </div>
           {products.isFetching && !products.isPending && (
@@ -190,6 +223,20 @@ export function AdminProducts() {
             </span>
           )}
         </div>
+
+        {catalogMessage && (
+          <p role="status" className="mt-4 text-sm font-semibold text-[var(--accent)]">
+            {catalogMessage}
+          </p>
+        )}
+        {deleteMutation.error && (
+          <p
+            role="alert"
+            className="mt-4 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-4 text-sm text-[var(--danger)]"
+          >
+            {deleteMutation.error.message}
+          </p>
+        )}
 
         {products.isPending ? (
           <div className="mt-5 space-y-3" aria-label="Loading products">
@@ -211,33 +258,48 @@ export function AdminProducts() {
         ) : (
           <>
             <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-              <div className="hidden grid-cols-[minmax(0,1fr)_10rem_10rem_6rem] gap-4 border-b border-[var(--border)] bg-white/[0.025] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)] md:grid">
+              <div className="hidden grid-cols-[minmax(0,1fr)_10rem_10rem_12rem] gap-4 border-b border-[var(--border)] bg-white/[0.025] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)] md:grid">
                 <span>Item</span>
                 <span>Location</span>
                 <span>Price</span>
-                <span className="text-right">Action</span>
+                <span className="text-right">Actions</span>
               </div>
-              {products.data.results.map((product) => (
-                <div
-                  key={product.id}
-                  className="grid gap-3 border-b border-[var(--border)] px-5 py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_10rem_10rem_6rem] md:items-center md:gap-4"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{product.title}</p>
-                    <p className="mt-1 text-xs text-[var(--muted)]">Item #{product.id}</p>
-                  </div>
-                  <span className="text-sm text-[var(--muted)]">{product.location_name}</span>
-                  <span className="font-mono text-sm font-semibold">
-                    {formatMoney(product.price, product.currency)}
-                  </span>
-                  <Link
-                    href={`/products/${product.id}`}
-                    className="justify-self-start rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold transition hover:border-[var(--border-strong)] hover:text-white md:justify-self-end"
+              {products.data.results.map((product) => {
+                const isDeleting =
+                  deleteMutation.isPending && deleteMutation.variables === product.id;
+
+                return (
+                  <div
+                    key={product.id}
+                    className="grid gap-3 border-b border-[var(--border)] px-5 py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_10rem_10rem_12rem] md:items-center md:gap-4"
                   >
-                    Edit
-                  </Link>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{product.title}</p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">Item #{product.id}</p>
+                    </div>
+                    <span className="text-sm text-[var(--muted)]">{product.location_name}</span>
+                    <span className="font-mono text-sm font-semibold">
+                      {formatMoney(product.price, product.currency, product.minor_unit)}
+                    </span>
+                    <div className="flex flex-wrap gap-2 md:justify-end">
+                      <Link
+                        href={`/products/${product.id}`}
+                        className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold transition hover:border-[var(--border-strong)] hover:text-white"
+                      >
+                        Edit
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => confirmDelete(product.id, product.title)}
+                        className="rounded-lg border border-[var(--danger)]/40 px-3 py-2 text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--danger)]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {isDeleting ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <nav

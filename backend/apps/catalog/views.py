@@ -1,7 +1,10 @@
 from django.db.models import QuerySet
+from django.db.models.deletion import ProtectedError
 from drf_spectacular.utils import OpenApiResponse, extend_schema
-from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateAPIView
+from rest_framework import status
+from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.accounts.views import IsApplicationAdmin
 from apps.catalog.models import Product, Region
@@ -79,12 +82,44 @@ class ProductListView(ListCreateAPIView):
         404: OpenApiResponse(description="The product does not exist."),
     },
 )
-class ProductDetailView(RetrieveUpdateAPIView):
-    queryset = Product.objects.select_related("location")
+class ProductDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = ProductSerializer
     permission_classes = [ProductMutationPermission]
+
+    def get_queryset(self) -> QuerySet[Product]:
+        if self.request.method == "DELETE":
+            return Product.objects.all()
+        return Product.objects.select_related("location")
 
     def get_serializer_class(self):
         if self.request.method in {"PUT", "PATCH"}:
             return ProductWriteSerializer
         return ProductSerializer
+
+    @extend_schema(
+        summary="Delete a product",
+        description=(
+            "Delete an unpurchased catalog item. Products referenced by immutable purchase "
+            "receipts are protected and return 409 Conflict."
+        ),
+        responses={
+            204: None,
+            401: OpenApiResponse(description="A valid access token is required."),
+            403: OpenApiResponse(description="Administrator privileges are required."),
+            404: OpenApiResponse(description="The product does not exist."),
+            409: OpenApiResponse(description="The product is referenced by purchase history."),
+        },
+    )
+    def destroy(self, request, *args, **kwargs):
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {
+                    "detail": (
+                        "This product cannot be deleted because it is referenced by an "
+                        "existing purchase receipt."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
