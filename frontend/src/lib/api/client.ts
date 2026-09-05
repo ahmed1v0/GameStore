@@ -1,7 +1,15 @@
 import type { ZodType } from "zod";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+import {
+  clearSession,
+  getEpoch,
+  getRequestSignal,
+  getSession,
+  refreshSession,
+  updateSessionUser,
+} from "@/features/auth/session-store";
+import { userSchema } from "./auth-schemas";
+import { ApiError, rawRequest } from "./transport";
+export { ApiError } from "./transport";
 
 type ApiRequestOptions<T> = {
   schema: ZodType<T>;
@@ -9,47 +17,62 @@ type ApiRequestOptions<T> = {
   init?: RequestInit;
 };
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly details: unknown,
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
-
 export async function apiRequest<T>(
   path: string,
   { schema, accessToken, init }: ApiRequestOptions<T>,
 ): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("Accept", "application/json");
-
-  if (init?.body) {
-    headers.set("Content-Type", "application/json");
+  const authenticated = Boolean(accessToken);
+  const started = getEpoch();
+  const signal = authenticated ? getRequestSignal() : undefined;
+  const requestSignal =
+    signal && init?.signal
+      ? AbortSignal.any([signal, init.signal])
+      : (signal ?? init?.signal);
+  const request = (access?: string) => {
+    const headers = new Headers(init?.headers);
+    if (access) headers.set("Authorization", `Bearer ${access}`);
+    return rawRequest(path, schema, {
+      ...init,
+      headers,
+      signal: requestSignal,
+    });
+  };
+  const ensureCurrent = () => {
+    requestSignal?.throwIfAborted();
+    if (authenticated && started !== getEpoch())
+      throw new DOMException("Account changed", "AbortError");
+  };
+  try {
+    const result = await request(
+      authenticated ? (getSession()?.access ?? accessToken!) : undefined,
+    );
+    ensureCurrent();
+    return result;
+  } catch (error) {
+    ensureCurrent();
+    if (!authenticated || !(error instanceof ApiError)) throw error;
+    if (error.status === 403 && path.startsWith("/admin/")) {
+      const user = await rawRequest("/auth/me", userSchema, {
+        headers: { Authorization: `Bearer ${getSession()?.access}` },
+        signal,
+      });
+      ensureCurrent();
+      updateSessionUser(user);
+      throw error;
+    }
+    if (error.status !== 401) throw error;
+    const next = await refreshSession();
+    if (!next) throw error;
+    ensureCurrent();
+    try {
+      // Only confirmed authentication rejection is retried, never a network failure.
+      const result = await request(next.access);
+      ensureCurrent();
+      return result;
+    } catch (retryError) {
+      if (retryError instanceof ApiError && retryError.status === 401)
+        clearSession();
+      throw retryError;
+    }
   }
-  if (accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers,
-  });
-  const body: unknown = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new ApiError(errorMessage(body, response.status), response.status, body);
-  }
-
-  return schema.parse(body);
-}
-
-function errorMessage(body: unknown, status: number): string {
-  if (body && typeof body === "object" && "detail" in body && typeof body.detail === "string") {
-    return body.detail;
-  }
-  return `Request failed with status ${status}.`;
 }

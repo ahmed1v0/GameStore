@@ -4,24 +4,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/features/auth/auth-provider";
-import { ApiError } from "@/lib/api/client";
 import { purchaseProduct } from "@/lib/api/orders";
 
 export function PurchaseButton({ productId }: Readonly<{ productId: number }>) {
-  const { logout, session } = useAuth();
+  const { session } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
   const purchase = useMutation({
     mutationFn: () => purchaseProduct(productId, session!.access),
     onSuccess(receipt) {
-      queryClient.setQueryData(["order", receipt.id], receipt);
+      queryClient.setQueryData(["order", session?.user.id, receipt.id], receipt);
       router.push(`/orders/${receipt.id}`);
-    },
-    onError(error) {
-      if (error instanceof ApiError && error.status === 401) {
-        logout();
-        router.replace("/login");
-      }
     },
   });
 

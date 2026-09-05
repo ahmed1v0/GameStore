@@ -1,10 +1,25 @@
 from django.db.models import QuerySet
 from drf_spectacular.utils import OpenApiResponse, extend_schema
-from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateAPIView
+from rest_framework.permissions import IsAuthenticated
 
+from apps.accounts.views import IsApplicationAdmin
 from apps.catalog.models import Product
 from apps.catalog.pagination import ProductPagination
-from apps.catalog.serializers import ProductListQuerySerializer, ProductSerializer
+from apps.catalog.serializers import (
+    ProductListQuerySerializer,
+    ProductSerializer,
+    ProductWriteSerializer,
+)
+
+
+class ProductMutationPermission(IsAuthenticated):
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        return request.method in {"GET", "HEAD", "OPTIONS"} or IsApplicationAdmin().has_permission(
+            request, view
+        )
 
 
 @extend_schema(
@@ -17,9 +32,13 @@ from apps.catalog.serializers import ProductListQuerySerializer, ProductSerializ
         401: OpenApiResponse(description="A valid access token is required."),
     },
 )
-class ProductListView(ListAPIView):
+class ProductListView(ListCreateAPIView):
     serializer_class = ProductSerializer
     pagination_class = ProductPagination
+    permission_classes = [ProductMutationPermission]
+
+    def get_serializer_class(self):
+        return ProductWriteSerializer if self.request.method == "POST" else ProductSerializer
 
     def get_queryset(self) -> QuerySet[Product]:
         query = ProductListQuerySerializer(data=self.request.query_params)
@@ -40,6 +59,12 @@ class ProductListView(ListAPIView):
         404: OpenApiResponse(description="The product does not exist."),
     },
 )
-class ProductDetailView(RetrieveAPIView):
+class ProductDetailView(RetrieveUpdateAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    permission_classes = [ProductMutationPermission]
+
+    def get_serializer_class(self):
+        if self.request.method in {"PUT", "PATCH"}:
+            return ProductWriteSerializer
+        return ProductSerializer

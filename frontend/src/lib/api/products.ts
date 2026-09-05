@@ -22,12 +22,14 @@ export const productPageSchema = z.object({
 export type Product = z.infer<typeof productSchema>;
 export type ProductLocation = Product["location"];
 export type ProductPage = z.infer<typeof productPageSchema>;
+export type ProductInput = Pick<Product, "title" | "description" | "price" | "location">;
 
 type ProductListParameters = {
   accessToken: string;
   page: number;
   pageSize: number;
   location: ProductLocation | "";
+  signal?: AbortSignal;
 };
 
 export function getProducts({
@@ -35,8 +37,12 @@ export function getProducts({
   page,
   pageSize,
   location,
+  signal,
 }: ProductListParameters): Promise<ProductPage> {
-  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  const query = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
   if (location) {
     query.set("location", location);
   }
@@ -44,12 +50,38 @@ export function getProducts({
   return apiRequest(`/products?${query}`, {
     schema: productPageSchema,
     accessToken,
+    init: { signal },
   });
 }
 
-export function getProduct(productId: number, accessToken: string): Promise<Product> {
+export function getProduct(
+  productId: number,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<Product> {
   return apiRequest(`/products/${productId}`, {
     schema: productSchema,
     accessToken,
+    init: { signal },
+  });
+}
+
+export function createProduct(accessToken: string, product: ProductInput): Promise<Product> {
+  return apiRequest("/products", {
+    schema: productSchema,
+    accessToken,
+    init: { method: "POST", body: JSON.stringify(product) },
+  });
+}
+
+export function updateProduct(
+  productId: number,
+  accessToken: string,
+  changes: Partial<Omit<ProductInput, "id">>,
+): Promise<Product> {
+  return apiRequest(`/products/${productId}`, {
+    schema: productSchema,
+    accessToken,
+    init: { method: "PATCH", body: JSON.stringify(changes) },
   });
 }

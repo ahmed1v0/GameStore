@@ -9,6 +9,26 @@ def test_schema_is_public_and_contains_application_contract(api_client: APIClien
     assert response.status_code == 200
     paths = response.data["paths"]
     assert "/api/v1/auth/login" in paths
+    assert {
+        f"/api/v1/auth/{name}"
+        for name in [
+            "signup",
+            "refresh",
+            "logout",
+            "me",
+            "csrf",
+            "verify-email",
+            "resend-verification",
+            "forgot-password",
+            "reset-password",
+            "change-password",
+        ]
+    } <= set(paths)
+    assert "/api/v1/admin/users" in paths
+    assert "/api/v1/admin/users/{id}" in paths
+    assert any(
+        p["name"] == "X-CSRFToken" for p in paths["/api/v1/auth/login"]["post"]["parameters"]
+    )
     assert "/api/v1/products" in paths
     assert "/api/v1/products/{id}" in paths
     assert "/api/v1/orders" in paths

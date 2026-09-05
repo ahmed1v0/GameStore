@@ -20,5 +20,8 @@ frontend/dist/
 *.tsbuildinfo
 
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .DS_Store
+# Local administrator login notes
+/ADMIN_CREDENTIALS.local.md

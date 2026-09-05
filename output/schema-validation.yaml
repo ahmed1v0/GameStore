@@ -1,0 +1,966 @@
+openapi: 3.0.3
+info:
+  title: Game Store API
+  version: 1.0.0
+  description: Authenticated catalog browsing and single-product purchasing.
+paths:
+  /api/v1/admin/users:
+    get:
+      operationId: v1_admin_users_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+  /api/v1/admin/users/{id}:
+    patch:
+      operationId: v1_admin_users_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminUpdate'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '403':
+          description: Administrator role required
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+  /api/v1/auth/change-password:
+    post:
+      operationId: v1_auth_change_password_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+  /api/v1/auth/csrf:
+    get:
+      operationId: v1_auth_csrf_retrieve
+      summary: Initialize CSRF protection
+      tags:
+      - v1
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Csrf'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+  /api/v1/auth/forgot-password:
+    post:
+      operationId: v1_auth_forgot_password_create
+      description: Returns an account-independent acknowledgment. Requires X-CSRFToken.
+        Verification requests do not send email when EMAIL_VERIFICATION_ENABLED is
+        false.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Email'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Email'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Email'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+  /api/v1/auth/login:
+    post:
+      operationId: v1_auth_login_create
+      description: Returns an access token and user. Sets an HttpOnly refresh cookie.
+        Requires X-CSRFToken.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Login'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Login'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+  /api/v1/auth/logout:
+    post:
+      operationId: v1_auth_logout_create
+      description: Requires X-CSRFToken. Revokes the refresh cookie; access expires
+        within five minutes.
+      tags:
+      - v1
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+      - name: game_store_refresh
+        in: cookie
+        required: false
+        schema:
+          type: string
+        description: HttpOnly cookie set by login/refresh; absent from JSON.
+  /api/v1/auth/me:
+    get:
+      operationId: v1_auth_me_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+  /api/v1/auth/refresh:
+    post:
+      operationId: v1_auth_refresh_create
+      description: Requires refresh cookie and X-CSRFToken. Rotates and blacklists
+        the old refresh token.
+      tags:
+      - v1
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+      - name: game_store_refresh
+        in: cookie
+        required: true
+        schema:
+          type: string
+        description: HttpOnly cookie set by login/refresh; absent from JSON.
+  /api/v1/auth/resend-verification:
+    post:
+      operationId: v1_auth_resend_verification_create
+      description: Returns an account-independent acknowledgment. Requires X-CSRFToken.
+        Verification requests do not send email when EMAIL_VERIFICATION_ENABLED is
+        false.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Email'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Email'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Email'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+  /api/v1/auth/reset-password:
+    post:
+      operationId: v1_auth_reset_password_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResetPassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResetPassword'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+  /api/v1/auth/signup:
+    post:
+      operationId: v1_auth_signup_create
+      description: Creates an ordinary user. Verification is controlled by EMAIL_VERIFICATION_ENABLED.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Signup'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Signup'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Signup'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignupResponse'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+  /api/v1/auth/verify-email:
+    post:
+      operationId: v1_auth_verify_email_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Token'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Token'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Token'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '400':
+          description: Invalid fields or expired/consumed link. Returns detail or
+            field errors.
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '403':
+          description: CSRF validation failed or administrator permission is required.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
+      parameters:
+      - name: X-CSRFToken
+        in: header
+        required: true
+        schema:
+          type: string
+        description: Token from GET /api/v1/auth/csrf. Send its cookie too.
+  /api/v1/orders:
+    post:
+      operationId: v1_orders_create
+      description: Create an order for the authenticated user and snapshot the product
+        values used by the receipt.
+      summary: Purchase one product
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderReceipt'
+          description: ''
+        '400':
+          description: The purchase request is malformed.
+        '401':
+          description: A valid access token is required.
+        '404':
+          description: The product does not exist.
+  /api/v1/orders/{id}:
+    get:
+      operationId: v1_orders_retrieve
+      description: Return a receipt owned by the authenticated user.
+      summary: Retrieve an order receipt
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderReceipt'
+          description: ''
+        '401':
+          description: A valid access token is required.
+        '404':
+          description: The order does not exist or belongs to another user.
+  /api/v1/products:
+    get:
+      operationId: v1_products_list
+      description: Return a deterministic, paginated product list with optional regional
+        filtering.
+      summary: List products
+      parameters:
+      - in: query
+        name: location
+        schema:
+          enum:
+          - JO
+          - SA
+          type: string
+          minLength: 1
+        description: |-
+          * `JO` - Jordan
+          * `SA` - Saudi Arabia
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProductList'
+          description: ''
+        '400':
+          description: Invalid page, page size, or location.
+        '401':
+          description: A valid access token is required.
+  /api/v1/products/{id}:
+    get:
+      operationId: v1_products_retrieve
+      summary: Retrieve a product
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          description: ''
+        '401':
+          description: A valid access token is required.
+        '404':
+          description: The product does not exist.
+components:
+  schemas:
+    ChangePassword:
+      type: object
+      properties:
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+        password_confirm:
+          type: string
+          writeOnly: true
+          maxLength: 128
+        current_password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+      required:
+      - current_password
+      - password
+      - password_confirm
+    Csrf:
+      type: object
+      properties:
+        csrfToken:
+          type: string
+        email_verification_enabled:
+          type: boolean
+      required:
+      - csrfToken
+      - email_verification_enabled
+    Email:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      required:
+      - email
+    Login:
+      type: object
+      properties:
+        username:
+          type: string
+          maxLength: 150
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+      required:
+      - password
+      - username
+    Message:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    OrderReceipt:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        product_id:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          readOnly: true
+        product_title:
+          type: string
+          maxLength: 255
+        unit_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        product_location:
+          $ref: '#/components/schemas/ProductLocationEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - product_id
+      - product_location
+      - product_title
+      - unit_price
+    PaginatedProductList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+    PaginatedUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PatchedAdminUpdate:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        is_active:
+          type: boolean
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        title:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        location:
+          $ref: '#/components/schemas/ProductLocationEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - description
+      - id
+      - location
+      - price
+      - title
+      - updated_at
+    ProductLocationEnum:
+      enum:
+      - JO
+      - SA
+      type: string
+      description: |-
+        * `JO` - Jordan
+        * `SA` - Saudi Arabia
+    PurchaseRequest:
+      type: object
+      properties:
+        product_id:
+          type: integer
+          minimum: 1
+      required:
+      - product_id
+    ResetPassword:
+      type: object
+      properties:
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+        password_confirm:
+          type: string
+          writeOnly: true
+          maxLength: 128
+        token:
+          type: string
+          maxLength: 256
+      required:
+      - password
+      - password_confirm
+      - token
+    RoleEnum:
+      enum:
+      - admin
+      - user
+      type: string
+      description: |-
+        * `admin` - admin
+        * `user` - user
+    Session:
+      type: object
+      properties:
+        access:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+      required:
+      - access
+      - user
+    Signup:
+      type: object
+      properties:
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+        password_confirm:
+          type: string
+          writeOnly: true
+          maxLength: 128
+        username:
+          type: string
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      required:
+      - email
+      - password
+      - password_confirm
+      - username
+    SignupResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+        verification_required:
+          type: boolean
+      required:
+      - detail
+      - verification_required
+    Token:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 256
+      required:
+      - token
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+        email:
+          type: string
+          format: email
+          readOnly: true
+          title: Email address
+        role:
+          type: string
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        is_superuser:
+          type: boolean
+          readOnly: true
+          title: Superuser status
+          description: Designates that this user has all permissions without explicitly
+            assigning them.
+        email_verified:
+          type: boolean
+          readOnly: true
+        verification_required:
+          type: boolean
+          readOnly: true
+        email_verification_enabled:
+          type: boolean
+          readOnly: true
+        date_joined:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - date_joined
+      - email
+      - email_verification_enabled
+      - email_verified
+      - id
+      - is_active
+      - is_superuser
+      - role
+      - username
+      - verification_required
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -26,7 +26,8 @@ def test_valid_credentials_return_tokens(api_client: APIClient, django_user_mode
     )
 
     assert response.status_code == 200
-    assert set(response.data) == {"access", "refresh"}
+    assert set(response.data) == {"access", "user"}
+    assert response.cookies["game_store_refresh"]["httponly"]
 
 
 @pytest.mark.django_db

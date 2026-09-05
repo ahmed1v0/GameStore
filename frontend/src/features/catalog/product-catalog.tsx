@@ -1,11 +1,9 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useAuth } from "@/features/auth/auth-provider";
-import { ApiError } from "@/lib/api/client";
 import { getProducts, type ProductLocation } from "@/lib/api/products";
 
 import { ProductCard } from "./product-card";
@@ -13,23 +11,25 @@ import { ProductCard } from "./product-card";
 const PAGE_SIZE = 12;
 
 export function ProductCatalog() {
-  const { logout, session } = useAuth();
-  const router = useRouter();
+  const { session } = useAuth();
   const [page, setPage] = useState(1);
   const [location, setLocation] = useState<ProductLocation | "">("");
   const products = useQuery({
-    queryKey: ["products", page, PAGE_SIZE, location],
-    queryFn: () => getProducts({ accessToken: session!.access, page, pageSize: PAGE_SIZE, location }),
+    queryKey: ["products", session?.user.id, page, PAGE_SIZE, location],
+    queryFn: ({ signal }) =>
+      getProducts({
+        accessToken: session!.access,
+        page,
+        pageSize: PAGE_SIZE,
+        location,
+        signal,
+      }),
     enabled: Boolean(session),
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, query) =>
+      query?.queryKey[1] === session?.user.id && query?.queryKey[4] === location
+        ? keepPreviousData(previous)
+        : undefined,
   });
-
-  useEffect(() => {
-    if (products.error instanceof ApiError && products.error.status === 401) {
-      logout();
-      router.replace("/login");
-    }
-  }, [logout, products.error, router]);
 
   return (
     <>
@@ -38,9 +38,12 @@ export function ProductCatalog() {
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
             Catalog
           </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">Digital game items</h1>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
+            Digital game items
+          </h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-[var(--muted)]">
-            Browse region-specific cosmetics, map packs, and profile collectibles.
+            Browse region-specific cosmetics, map packs, and profile
+            collectibles.
           </p>
         </div>
 
@@ -61,6 +64,11 @@ export function ProductCatalog() {
         </label>
       </div>
 
+      {products.isFetching && !products.isPending && (
+        <p role="status" className="mt-6 text-sm text-[var(--muted)]">
+          Loading requested page…
+        </p>
+      )}
       <CatalogResults
         isLoading={products.isPending}
         isError={products.isError}
@@ -68,7 +76,10 @@ export function ProductCatalog() {
       />
 
       {products.data && products.data.count > 0 ? (
-        <nav className="mt-10 flex items-center justify-between border-t border-[var(--border)] pt-6" aria-label="Product pagination">
+        <nav
+          className="mt-10 flex items-center justify-between border-t border-[var(--border)] pt-6"
+          aria-label="Product pagination"
+        >
           <button
             type="button"
             disabled={!products.data.previous || products.isFetching}
@@ -78,7 +89,9 @@ export function ProductCatalog() {
             Previous
           </button>
           <p className="text-sm text-[var(--muted)]">
-            Page <span className="font-semibold text-white">{page}</span> · {products.data.count} items
+            {products.isPlaceholderData ? "Loading page" : "Page"}{" "}
+            <span className="font-semibold text-white">{page}</span> ·{" "}
+            {products.data.count} items
           </p>
           <button
             type="button"
@@ -103,9 +116,15 @@ type CatalogResultsProps = {
 function CatalogResults({ isError, isLoading, products }: CatalogResultsProps) {
   if (isLoading) {
     return (
-      <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="Loading products">
+      <div
+        className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        aria-label="Loading products"
+      >
         {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="h-64 animate-pulse rounded-2xl bg-[var(--surface)]" />
+          <div
+            key={index}
+            className="h-64 animate-pulse rounded-2xl bg-[var(--surface)]"
+          />
         ))}
       </div>
     );
@@ -113,7 +132,10 @@ function CatalogResults({ isError, isLoading, products }: CatalogResultsProps) {
 
   if (isError) {
     return (
-      <div role="alert" className="mt-10 rounded-2xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-6 text-[var(--danger)]">
+      <div
+        role="alert"
+        className="mt-10 rounded-2xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-6 text-[var(--danger)]"
+      >
         Products could not be loaded. Check the API connection and try again.
       </div>
     );

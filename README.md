@@ -10,6 +10,7 @@ the catalog, users, and immutable purchase receipts.
 
 - CSV-backed product catalog for Jordan (`JO`) and Saudi Arabia (`SA`)
 - JWT-authenticated REST API
+- Signup with optional email verification, password recovery, secure refresh cookies, and admin/user management
 - Paginated and location-filtered product browsing
 - Single-product purchase flow with historical receipt snapshots
 - Generated OpenAPI schema and Swagger UI
@@ -68,7 +69,10 @@ any shared or deployed environment.
 
 ```powershell
 docker compose up -d db
+docker compose ps
 ```
+
+Continue once the `db` service reports `healthy`.
 
 ### Backend Setup
 
@@ -90,13 +94,13 @@ python backend/manage.py migrate
 python backend/manage.py import_items data/items.csv
 ```
 
-### Create Demo User
+### Seed Administrator
 
 ```powershell
-python backend/manage.py createsuperuser --username demo --email demo@example.com
+python backend/manage.py seed_admin --username admin --email admin@example.com --password P@ssw0rd
 ```
 
-Use the prompted password when signing in.
+The command is idempotent and updates the administrator password if the account already exists.
 
 ### Start Backend
 
@@ -108,7 +112,7 @@ python backend/manage.py runserver
 
 ```powershell
 Set-Location frontend
-npm install
+npm ci
 ```
 
 ### Start Frontend
@@ -118,6 +122,10 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+VS Code users can select the `Full Stack` launch target after PostgreSQL is
+healthy and dependencies are installed. It starts both development servers with
+debugging enabled.
 
 ## Environment Variables
 
@@ -144,9 +152,23 @@ and the OpenAPI schema at `http://localhost:8000/api/schema/`.
 
 ## Authentication
 
-Send credentials to `POST /api/v1/auth/login`. Use the returned access token as
-`Authorization: Bearer <token>`. Application endpoints deny unauthenticated
-requests by default.
+Use `ADMIN_CREDENTIALS.local.md` to record the credentials you choose for your local
+administrator. This file is ignored by Git and does not create an account.
+
+Both catalog and user lists paginate in SQL. See [page performance](docs/PERFORMANCE.md)
+for query budgets, cancellation, caching, index setup and scaling considerations.
+
+Sign up at `/signup`, then sign in immediately. Email verification is disabled by
+default. To enable it, set `EMAIL_VERIFICATION_ENABLED=true` in the backend environment
+and restart Django; new signups then follow the link printed by console email.
+Existing accounts retain access. Use `createsuperuser` to
+bootstrap the first administrator, then manage users at `/admin/users`.
+
+`POST /api/v1/auth/login` returns an access token and user, and sets an HttpOnly
+refresh cookie. Authentication POST requests require CSRF protection. Application
+endpoints accept `Authorization: Bearer <token>` and deny unauthenticated requests
+by default. See [authentication setup and API contract](docs/AUTHENTICATION.md) for
+SMTP, migrations, session behavior, roles, throttling, and deployment configuration.
 
 ## CSV Import
 
@@ -191,15 +213,15 @@ trade-offs behind each meaningful choice.
 
 ## Trade-offs
 
-- Access and refresh tokens are stored in browser `sessionStorage` for assessment
-  simplicity. This remains accessible to JavaScript and therefore increases the
-  impact of an XSS flaw compared with an HttpOnly cookie design.
-- The API has no refresh-token rotation or revocation infrastructure.
+- Access tokens stay in memory; rotating refresh tokens use HttpOnly cookies with
+  CSRF protection. Deployment assumes HTTPS and a frontend/API on the same site.
+- Email delivery is synchronous with a bounded timeout. Failed deliveries can be
+  retried through the resend/recovery forms.
 - Local development runs only PostgreSQL in Docker; application processes run on
   the host for faster feedback.
 
 ## Future Improvements
 
-- Use secure HttpOnly cookies and CSRF protection for a production browser client.
+- Add an asynchronous email queue for higher-volume delivery.
 - Add CI for backend tests, Ruff, frontend linting, type checks, and builds.
 - Add deployment-specific security headers, observability, and secret management.

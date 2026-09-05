@@ -13,7 +13,10 @@ export const orderReceiptSchema = z.object({
 
 export type OrderReceipt = z.infer<typeof orderReceiptSchema>;
 
-export function purchaseProduct(productId: number, accessToken: string): Promise<OrderReceipt> {
+export function purchaseProduct(
+  productId: number,
+  accessToken: string,
+): Promise<OrderReceipt> {
   return apiRequest("/orders", {
     schema: orderReceiptSchema,
     accessToken,
@@ -24,9 +27,14 @@ export function purchaseProduct(productId: number, accessToken: string): Promise
   });
 }
 
-export function getOrder(orderId: number, accessToken: string): Promise<OrderReceipt> {
+export function getOrder(
+  orderId: number,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<OrderReceipt> {
   return apiRequest(`/orders/${orderId}`, {
     schema: orderReceiptSchema,
     accessToken,
+    init: { signal },
   });
 }

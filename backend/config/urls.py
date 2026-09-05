@@ -3,11 +3,9 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.permissions import AllowAny
 
-from config.views import LoginView
-
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/v1/auth/login", LoginView.as_view(), name="token_obtain_pair"),
+    path("api/v1/", include("apps.accounts.urls")),
     path("api/v1/", include("apps.catalog.urls")),
     path("api/v1/", include("apps.orders.urls")),
     path(

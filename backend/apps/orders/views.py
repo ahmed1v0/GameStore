@@ -50,4 +50,4 @@ class OrderDetailView(RetrieveAPIView):
     serializer_class = OrderReceiptSerializer
 
     def get_queryset(self) -> QuerySet[Order]:
-        return Order.objects.filter(user=self.request.user).select_related("product")
+        return Order.objects.filter(user=self.request.user)

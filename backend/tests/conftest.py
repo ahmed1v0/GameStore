@@ -3,9 +3,10 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
-from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.accounts.authentication import issue_refresh
 from apps.catalog.models import Product
 
 
@@ -22,8 +23,13 @@ def user(django_user_model):
 @pytest.fixture
 def authenticated_client(user) -> APIClient:
     client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(user)}")
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {issue_refresh(user).access_token}")
     return client
+
+
+@pytest.fixture(autouse=True)
+def clear_throttle_cache():
+    cache.clear()
 
 
 @pytest.fixture
