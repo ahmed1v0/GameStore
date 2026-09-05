@@ -83,6 +83,46 @@ paths:
           description: Invalid credentials. Unverified login returns code=email_unverified.
         '429':
           description: Too many attempts. Retry-After gives the delay in seconds.
+  /api/v1/admin/users/invitations:
+    post:
+      operationId: v1_admin_users_invitations_create
+      description: Creates an application account and sends a one-time password-setup
+        invitation. The generated bootstrap password is never returned or shared.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminInvite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminInvite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminInvite'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+          description: ''
+        '403':
+          description: Administrator role required
+        '401':
+          description: Invalid credentials. Unverified login returns code=email_unverified.
+        '429':
+          description: Too many attempts. Retry-After gives the delay in seconds.
   /api/v1/auth/change-password:
     post:
       operationId: v1_auth_change_password_create
@@ -605,6 +645,62 @@ paths:
           description: Invalid page, page size, or location.
         '401':
           description: A valid access token is required.
+    post:
+      operationId: v1_products_create
+      description: Return a deterministic, paginated product list with optional regional
+        filtering.
+      summary: List products
+      parameters:
+      - in: query
+        name: location
+        schema:
+          enum:
+          - JO
+          - SA
+          type: string
+          minLength: 1
+        description: |-
+          * `JO` - Jordan
+          * `SA` - Saudi Arabia
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProductWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProductWrite'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProductList'
+          description: ''
+        '400':
+          description: Invalid page, page size, or location.
+        '401':
+          description: A valid access token is required.
   /api/v1/products/{id}:
     get:
       operationId: v1_products_retrieve
@@ -630,8 +726,97 @@ paths:
           description: A valid access token is required.
         '404':
           description: The product does not exist.
+    put:
+      operationId: v1_products_update
+      summary: Retrieve a product
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProductWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProductWrite'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          description: ''
+        '401':
+          description: A valid access token is required.
+        '404':
+          description: The product does not exist.
+    patch:
+      operationId: v1_products_partial_update
+      summary: Retrieve a product
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProductWrite'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProductWrite'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProductWrite'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          description: ''
+        '401':
+          description: A valid access token is required.
+        '404':
+          description: The product does not exist.
 components:
   schemas:
+    AdminInvite:
+      type: object
+      properties:
+        username:
+          type: string
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          default: user
+      required:
+      - email
+      - username
     ChangePassword:
       type: object
       properties:
@@ -698,9 +883,6 @@ components:
           readOnly: true
         product_id:
           type: integer
-          maximum: 9223372036854775807
-          minimum: 0
-          format: int64
           readOnly: true
         product_title:
           type: string
@@ -775,14 +957,37 @@ components:
           $ref: '#/components/schemas/RoleEnum'
         is_active:
           type: boolean
+    PatchedProductWrite:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        location:
+          $ref: '#/components/schemas/ProductLocationEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     Product:
       type: object
       properties:
         id:
           type: integer
-          maximum: 9223372036854775807
-          minimum: 0
-          format: int64
+          readOnly: true
         title:
           type: string
           maxLength: 255
@@ -818,6 +1023,39 @@ components:
       description: |-
         * `JO` - Jordan
         * `SA` - Saudi Arabia
+    ProductWrite:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        location:
+          $ref: '#/components/schemas/ProductLocationEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - description
+      - id
+      - location
+      - price
+      - title
+      - updated_at
     PurchaseRequest:
       type: object
       properties:

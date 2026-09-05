@@ -1,24 +1,30 @@
 "use client";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
-import { getUsers, updateUser } from "@/lib/api/auth";
+import { useRef, useState, type FormEvent } from "react";
+
+import { getUsers, inviteUser, updateUser } from "@/lib/api/auth";
 import type { AuthUser } from "@/lib/api/auth-schemas";
 import { useAuth } from "./auth-provider";
-import { buttonClass, inputClass } from "./auth-form";
+import { buttonClass, inputClass } from "./auth-styles";
 
 export function AdminUsers() {
   const { session } = useAuth();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const inviteForm = useRef<HTMLFormElement>(null);
   const queryClient = useQueryClient();
+
   const users = useQuery({
     queryKey: ["admin-users", session?.user.id, page, search],
     queryFn: ({ signal }) => getUsers(session!.access, page, search, signal),
     enabled: session?.user.role === "admin",
     retry: false,
   });
-  const mutation = useMutation({
+
+  const updateMutation = useMutation({
     mutationFn: ({
       id,
       changes,
@@ -31,6 +37,23 @@ export function AdminUsers() {
       void queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     },
   });
+
+  const inviteMutation = useMutation({
+    mutationFn: (invitation: {
+      username: string;
+      email: string;
+      role: "admin" | "user";
+    }) => inviteUser(session!.access, invitation),
+    onSuccess(user) {
+      setMessage(`Invitation created for ${user.email}.`);
+      inviteForm.current?.reset();
+      setInviteOpen(false);
+      setPage(1);
+      setSearch("");
+      void queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+  });
+
   function searchUsers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPage(1);
@@ -38,22 +61,112 @@ export function AdminUsers() {
       String(new FormData(event.currentTarget).get("search") ?? "").trim(),
     );
   }
+
+  function submitInvitation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+    const values = new FormData(event.currentTarget);
+    inviteMutation.mutate({
+      username: String(values.get("username") ?? "").trim(),
+      email: String(values.get("email") ?? "").trim(),
+      role: values.get("role") === "admin" ? "admin" : "user",
+    });
+  }
+
   function update(
     user: AuthUser,
     changes: { role?: "admin" | "user"; is_active?: boolean },
   ) {
     setMessage(null);
-    mutation.mutate({ id: user.id, changes });
+    updateMutation.mutate({ id: user.id, changes });
   }
+
+  const mutationError = inviteMutation.error ?? updateMutation.error;
+
   return (
     <section>
-      <p className="text-sm font-semibold uppercase tracking-widest text-[var(--accent)]">
-        Administration
-      </p>
-      <h1 className="mt-3 text-4xl font-bold">Users and roles</h1>
-      <p className="mt-3 text-[var(--muted)]">
-        Manage account access and application administrators.
-      </p>
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-widest text-[var(--accent)]">
+            Administration
+          </p>
+          <h1 className="mt-3 text-4xl font-bold">Users and roles</h1>
+          <p className="mt-3 text-[var(--muted)]">
+            Manage account access and application administrators.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={() => {
+            setMessage(null);
+            setInviteOpen((current) => !current);
+          }}
+          aria-expanded={inviteOpen}
+          aria-controls="invite-user-form"
+        >
+          {inviteOpen ? "Cancel invitation" : "Invite user"}
+        </button>
+      </div>
+
+      {inviteOpen && (
+        <form
+          ref={inviteForm}
+          id="invite-user-form"
+          className="mt-8 grid gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:grid-cols-2"
+          onSubmit={submitInvitation}
+        >
+          <div className="sm:col-span-2">
+            <h2 className="text-xl font-bold">Invite a new account</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              The user receives a one-time link to choose their own password.
+            </p>
+          </div>
+
+          <label>
+            <span className="mb-2 block text-sm font-semibold">Username</span>
+            <input
+              name="username"
+              required
+              maxLength={150}
+              autoComplete="off"
+              className={inputClass}
+            />
+          </label>
+
+          <label>
+            <span className="mb-2 block text-sm font-semibold">Email</span>
+            <input
+              name="email"
+              type="email"
+              required
+              maxLength={254}
+              autoComplete="off"
+              className={inputClass}
+            />
+          </label>
+
+          <label>
+            <span className="mb-2 block text-sm font-semibold">
+              Initial role
+            </span>
+            <select name="role" defaultValue="user" className={inputClass}>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+
+          <div className="flex items-end">
+            <button
+              className={`${buttonClass} w-full`}
+              disabled={inviteMutation.isPending}
+            >
+              {inviteMutation.isPending ? "Creating invitation…" : "Send invitation"}
+            </button>
+          </div>
+        </form>
+      )}
+
       <form className="my-8 flex max-w-xl gap-3" onSubmit={searchUsers}>
         <label className="flex-1">
           <span className="sr-only">Search users</span>
@@ -66,16 +179,19 @@ export function AdminUsers() {
         </label>
         <button className={buttonClass}>Search</button>
       </form>
+
       {message && (
         <p role="status" className="mb-5 text-[var(--accent)]">
           {message}
         </p>
       )}
-      {mutation.error && (
+
+      {mutationError && (
         <p role="alert" className="mb-5 text-[var(--danger)]">
-          {mutation.error.message}
+          {mutationError.message}
         </p>
       )}
+
       {users.isPending ? (
         <p role="status">Loading users…</p>
       ) : users.isError ? (
@@ -110,6 +226,10 @@ export function AdminUsers() {
                 {users.data.results.map((user) => {
                   const protectedUser =
                     user.is_superuser || user.id === session!.user.id;
+                  const updatingThisUser =
+                    updateMutation.isPending &&
+                    updateMutation.variables?.id === user.id;
+
                   return (
                     <tr
                       key={user.id}
@@ -133,7 +253,7 @@ export function AdminUsers() {
                         <select
                           aria-label={`Role for ${user.username}`}
                           value={user.role}
-                          disabled={protectedUser || mutation.isPending}
+                          disabled={protectedUser || updatingThisUser}
                           onChange={(event) =>
                             update(user, {
                               role: event.target.value as "admin" | "user",
@@ -156,14 +276,18 @@ export function AdminUsers() {
                         </span>
                         <button
                           type="button"
-                          disabled={protectedUser || mutation.isPending}
+                          disabled={protectedUser || updatingThisUser}
                           aria-label={`${user.is_active ? "Deactivate" : "Activate"} ${user.username}`}
                           onClick={() =>
                             update(user, { is_active: !user.is_active })
                           }
                           className="mt-2 font-semibold text-[var(--accent)] disabled:opacity-40"
                         >
-                          {user.is_active ? "Deactivate" : "Activate"}
+                          {updatingThisUser
+                            ? "Updating…"
+                            : user.is_active
+                              ? "Deactivate"
+                              : "Activate"}
                         </button>
                       </td>
                     </tr>
@@ -171,12 +295,14 @@ export function AdminUsers() {
                 })}
               </tbody>
             </table>
+
             {users.data.count === 0 && (
               <p className="p-8 text-center text-[var(--muted)]">
                 No matching accounts.
               </p>
             )}
           </div>
+
           <nav
             aria-label="User pagination"
             className="mt-6 flex items-center justify-between"

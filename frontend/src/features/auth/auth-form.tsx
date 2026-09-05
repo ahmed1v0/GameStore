@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { z } from "zod";
+
 import { StoreMark } from "@/components/store-mark";
 import {
   getAuthConfiguration,
@@ -11,10 +12,21 @@ import {
   verifyEmail,
 } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
+import { buttonClass, inputClass } from "./auth-styles";
+import { PasswordField } from "./password-field";
 import { changeSessionPassword, resetSessionPassword } from "./session-store";
+import { useAuthCooldown } from "./use-auth-cooldown";
+
+export { buttonClass, inputClass } from "./auth-styles";
 
 export type AuthFormMode =
-  "signup" | "forgot" | "resend" | "verify" | "reset" | "change";
+  | "signup"
+  | "forgot"
+  | "resend"
+  | "verify"
+  | "reset"
+  | "change";
+
 const content = {
   signup: [
     "Create your account",
@@ -48,15 +60,21 @@ const content = {
   ],
 } as const;
 
-export const inputClass =
-  "w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 text-base outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20";
-export const buttonClass =
-  "rounded-xl bg-[var(--accent)] px-4 py-3 font-bold text-[#08120e] hover:bg-[var(--accent-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60";
+const invitationContent = [
+  "Set your password",
+  "Finish setting up your invited account with a password only you know.",
+  "Finish account setup",
+] as const;
 
 export function AuthForm({
   mode,
   token = "",
-}: Readonly<{ mode: AuthFormMode; token?: string }>) {
+  invitation = false,
+}: Readonly<{
+  mode: AuthFormMode;
+  token?: string;
+  invitation?: boolean;
+}>) {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -66,6 +84,8 @@ export function AuthForm({
     boolean | null
   >(null);
   const [configurationError, setConfigurationError] = useState(false);
+  const { cooldownSeconds, captureCooldown } = useAuthCooldown();
+
   const verificationMode = mode === "verify" || mode === "resend";
   useEffect(() => {
     if (!verificationMode) return;
@@ -83,10 +103,12 @@ export function AuthForm({
       cancelled = true;
     };
   }, [verificationMode]);
+
   const passwordMode =
     mode === "signup" || mode === "reset" || mode === "change";
   const needsToken = mode === "verify" || mode === "reset";
-  const [title, description, action] = content[mode];
+  const [title, description, action] =
+    invitation && mode === "reset" ? invitationContent : content[mode];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,6 +117,7 @@ export function AuthForm({
     ) as Record<string, string>;
     setError(null);
     setFieldErrors({});
+
     if (passwordMode) {
       const parsed = z
         .object({
@@ -118,6 +141,7 @@ export function AuthForm({
         return;
       }
     }
+
     setBusy(true);
     try {
       let detail: string;
@@ -125,16 +149,22 @@ export function AuthForm({
         const result = await signup(values);
         detail = result.detail;
         setSignupNeedsVerification(result.verification_required);
-      } else if (mode === "verify") detail = (await verifyEmail(token)).detail;
-      else if (mode === "reset")
-        detail = (await resetSessionPassword({ ...values, token })).detail;
-      else if (mode === "change") {
+      } else if (mode === "verify") {
+        detail = (await verifyEmail(token)).detail;
+      } else if (mode === "reset") {
+        const result = await resetSessionPassword({ ...values, token });
+        detail = invitation
+          ? "Account setup complete. Sign in with your new password."
+          : result.detail;
+      } else if (mode === "change") {
         await changeSessionPassword(values);
         detail = "Password changed. Sign in again.";
-      } else
+      } else {
         detail = (await requestEmail(values.email, mode === "resend")).detail;
+      }
       setMessage(detail);
     } catch (reason) {
+      captureCooldown(reason);
       setError(
         reason instanceof ApiError
           ? reason.message
@@ -162,10 +192,10 @@ export function AuthForm({
     }
   }
 
-  function field(
+  function textField(
     name: string,
     label: string,
-    type: string,
+    type: "text" | "email",
     autoComplete: string,
   ) {
     return (
@@ -179,9 +209,7 @@ export function AuthForm({
           type={type}
           autoComplete={autoComplete}
           required
-          maxLength={
-            name === "username" ? 150 : type === "password" ? 128 : 254
-          }
+          maxLength={name === "username" ? 150 : 254}
           aria-invalid={Boolean(fieldErrors[name])}
           aria-describedby={fieldErrors[name] ? `${name}-error` : undefined}
           className={inputClass}
@@ -198,6 +226,12 @@ export function AuthForm({
     );
   }
 
+  const submitLabel = busy
+    ? "Please wait…"
+    : cooldownSeconds > 0
+      ? `Try again in ${cooldownSeconds}s`
+      : action;
+
   return (
     <main className="grid min-h-screen place-items-center px-5 py-12">
       <section className="w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl shadow-black/25 sm:p-9">
@@ -206,6 +240,7 @@ export function AuthForm({
         {(!verificationMode || verificationEnabled === true) && (
           <p className="mt-2 leading-7 text-[var(--muted)]">{description}</p>
         )}
+
         {verificationMode && verificationEnabled !== true ? (
           <p
             role={configurationError ? "alert" : "status"}
@@ -231,31 +266,40 @@ export function AuthForm({
         ) : (
           <form className="mt-8 space-y-5" onSubmit={submit}>
             {mode === "signup" &&
-              field("username", "Username", "text", "username")}
+              textField("username", "Username", "text", "username")}
             {["signup", "forgot", "resend"].includes(mode) &&
-              field("email", "Email", "email", "email")}
-            {mode === "change" &&
-              field(
-                "current_password",
-                "Current password",
-                "password",
-                "current-password",
-              )}
+              textField("email", "Email", "email", "email")}
+
+            {mode === "change" && (
+              <PasswordField
+                name="current_password"
+                label="Current password"
+                autoComplete="current-password"
+                error={fieldErrors.current_password}
+              />
+            )}
+
             {passwordMode && (
               <>
-                {field("password", "New password", "password", "new-password")}
+                <PasswordField
+                  name="password"
+                  label={invitation && mode === "reset" ? "Password" : "New password"}
+                  autoComplete="new-password"
+                  error={fieldErrors.password}
+                />
                 <p className="text-sm text-[var(--muted)]">
                   At least 8 characters. Avoid common passwords and personal
                   details.
                 </p>
-                {field(
-                  "password_confirm",
-                  "Confirm password",
-                  "password",
-                  "new-password",
-                )}
+                <PasswordField
+                  name="password_confirm"
+                  label="Confirm password"
+                  autoComplete="new-password"
+                  error={fieldErrors.password_confirm}
+                />
               </>
             )}
+
             {error && (
               <p
                 role="alert"
@@ -264,11 +308,16 @@ export function AuthForm({
                 {error}
               </p>
             )}
-            <button className={`${buttonClass} w-full`} disabled={busy}>
-              {busy ? "Please wait…" : action}
+
+            <button
+              className={`${buttonClass} w-full`}
+              disabled={busy || cooldownSeconds > 0}
+            >
+              {submitLabel}
             </button>
           </form>
         )}
+
         {((mode === "signup" && message && signupNeedsVerification) ||
           (mode === "verify" &&
             verificationEnabled === true &&
@@ -286,6 +335,7 @@ export function AuthForm({
             </Link>
           </p>
         )}
+
         <nav
           aria-label="Account links"
           className="mt-7 flex flex-wrap gap-x-5 gap-y-3 text-sm font-semibold text-[var(--accent)]"

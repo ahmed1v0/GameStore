@@ -19,6 +19,7 @@ from . import services
 from .authentication import check_account, issue_refresh
 from .models import EmailToken
 from .serializers import (
+    AdminInviteSerializer,
     AdminUpdateSerializer,
     ChangePasswordSerializer,
     CsrfSerializer,
@@ -46,7 +47,7 @@ def session_response(user, token):
     response.set_cookie(
         settings.AUTH_REFRESH_COOKIE,
         str(token),
-        max_age=86400,
+        max_age=int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
         path="/api/v1/auth",
         secure=settings.AUTH_COOKIE_SECURE,
         httponly=True,
@@ -222,6 +223,10 @@ class EmailRequestView(AuthView):
         )
         if user and user.has_usable_password():
             services.send_account_email(user, self.purpose)
+        else:
+            services.logger.info(
+                "Account email request skipped: no active account with a usable password matches."
+            )
         return Response({"detail": services.GENERIC_EMAIL_MESSAGE})
 
 
@@ -301,6 +306,29 @@ class AdminUserListView(ListAPIView):
         .prefetch_related("groups")
         .order_by("id")
     )
+
+
+class AdminUserInviteView(APIView):
+    permission_classes = [IsApplicationAdmin]
+    throttle_classes = [AuthThrottle]
+
+    @extend_schema(
+        request=AdminInviteSerializer,
+        responses={
+            201: UserSerializer,
+            400: MessageSerializer,
+            403: OpenApiResponse(description="Administrator role required"),
+        },
+        description=(
+            "Creates an application account and sends a one-time password-setup invitation. "
+            "The generated bootstrap password is never returned or shared."
+        ),
+    )
+    def post(self, request):
+        serializer = AdminInviteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invited = services.invite_account(request.user.pk, serializer.validated_data)
+        return Response(UserSerializer(invited).data, status=status.HTTP_201_CREATED)
 
 
 class AdminUserUpdateView(APIView):

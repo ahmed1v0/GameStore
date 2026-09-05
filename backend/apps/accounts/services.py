@@ -1,17 +1,19 @@
 import hashlib
 import logging
 import secrets
+import smtplib
 from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.template.loader import render_to_string
 from django.utils import timezone
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from .models import ADMIN_GROUP, AccountAudit, AccountSecurity, EmailToken
 from .serializers import PasswordSerializer, role_for
@@ -24,16 +26,23 @@ def fingerprint(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-def send_account_email(user, purpose):
+def send_account_email(user, purpose, *, invitation=False):
     if purpose == EmailToken.Purpose.VERIFY and not settings.EMAIL_VERIFICATION_ENABLED:
+        logger.info("Account email skipped: verification is disabled.")
         return
+    if invitation and purpose != EmailToken.Purpose.RESET:
+        raise ValueError("Invitations must use a password-setup token.")
+
     # Lock the user before creating/consuming tokens throughout this app.
     with transaction.atomic():
         user = get_user_model().objects.select_for_update().get(pk=user.pk)
         if not user.is_active or not user.email:
+            logger.info("Account email skipped: account is inactive or has no email.")
             return
         if purpose == EmailToken.Purpose.VERIFY and user.security.email_verified_at:
+            logger.info("Account email skipped: email is already verified.")
             return
+
         raw = secrets.token_urlsafe(32)
         EmailToken.objects.filter(user=user, purpose=purpose, consumed_at=None).update(
             consumed_at=timezone.now()
@@ -48,30 +57,56 @@ def send_account_email(user, purpose):
             expires_at=timezone.now()
             + timedelta(
                 seconds=settings.EMAIL_VERIFICATION_TIMEOUT
-                if purpose == "verify"
+                if purpose == EmailToken.Purpose.VERIFY
                 else settings.PASSWORD_RESET_TIMEOUT
             ),
         )
-        route = "verify-email" if purpose == "verify" else "reset-password"
-        link = f"{settings.FRONTEND_URL.rstrip('/')}/{route}?{urlencode({'token': raw})}"
-        subject = (
-            "Verify your Game Store email"
-            if purpose == "verify"
-            else "Reset your Game Store password"
-        )
-        body = (
-            f"{subject}\n\nOpen this link to continue:\n{link}\n\n"
-            "If you did not request this, ignore this email."
-        )
-        transaction.on_commit(lambda: deliver_email(subject, body, user.email))
+
+        route = "verify-email" if purpose == EmailToken.Purpose.VERIFY else "reset-password"
+        query = {"token": raw}
+        if invitation:
+            query["invitation"] = "1"
+        link = f"{settings.FRONTEND_URL.rstrip('/')}/{route}?{urlencode(query)}"
+
+        if invitation:
+            subject = "You're invited to Game Store"
+            template = "invitation"
+        else:
+            subject = (
+                "Verify your Game Store email"
+                if purpose == EmailToken.Purpose.VERIFY
+                else "Reset your Game Store password"
+            )
+            template = "verification" if purpose == EmailToken.Purpose.VERIFY else "password_reset"
+
+        context = {"username": user.username, "action_url": link}
+        body = render_to_string(f"accounts/email/{template}.txt", context)
+        html = render_to_string(f"accounts/email/{template}.html", context)
+
+        transaction.on_commit(lambda: deliver_email(subject, body, html, user.email))
 
 
-def deliver_email(subject, body, recipient):
+def deliver_email(subject, body, html, recipient):
     try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient], fail_silently=False)
+        email = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
+        email.attach_alternative(html, "text/html")
+        sent = email.send(fail_silently=False)
+        if sent != 1:
+            logger.error("Account email delivery failed: email backend accepted no message.")
+            return
+        logger.info("Account email accepted by configured backend (%s).", settings.EMAIL_BACKEND)
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.error(
+            "Account email delivery failed: SMTP authentication rejected (code %s).",
+            exc.smtp_code,
+        )
+    except smtplib.SMTPException as exc:
+        logger.error("Account email delivery failed: SMTP error (%s).", type(exc).__name__)
+    except OSError as exc:
+        logger.error("Account email delivery failed: network error (%s).", type(exc).__name__)
     except Exception:
-        # Do not log SMTP exception text: it can contain credentials or message content.
-        logger.error("Account email delivery failed; the user can request a resend.")
+        # Keep unexpected failures generic: exception text can expose secrets.
+        logger.error("Account email delivery failed: unexpected email backend error.")
 
 
 def signup(attrs):
@@ -131,16 +166,57 @@ def change_password(user_id, attrs):
     security.save(update_fields=["session_version"])
 
 
-@transaction.atomic
-def update_account(actor_id, target_id, attrs):
-    # A stable lock serializes ALL role/status changes, including concurrent demotions.
-    Group.objects.select_for_update().get(name=ADMIN_GROUP)
+def _lock_admin_actor(actor_id):
+    group = Group.objects.select_for_update().get(name=ADMIN_GROUP)
     users = get_user_model().objects
     actor = users.select_for_update().get(pk=actor_id)
     if not actor.is_active or role_for(actor) != "admin":
-        from rest_framework.exceptions import PermissionDenied
-
         raise PermissionDenied()
+    return actor, group, users
+
+
+def invite_account(actor_id, attrs):
+    try:
+        with transaction.atomic():
+            actor, group, users = _lock_admin_actor(actor_id)
+            generated_password = secrets.token_urlsafe(48)
+            user = users.create_user(
+                username=attrs["username"],
+                email=attrs["email"],
+                password=generated_password,
+            )
+            if attrs["role"] == "admin":
+                user.groups.add(group)
+
+            AccountAudit.objects.create(
+                actor=actor,
+                target=user,
+                before={"exists": False},
+                after={
+                    "exists": True,
+                    "role": attrs["role"],
+                    "is_active": True,
+                },
+            )
+            send_account_email(
+                user,
+                EmailToken.Purpose.RESET,
+                invitation=True,
+            )
+    except IntegrityError as exc:
+        raise ValidationError({"detail": "This username or email is already in use."}) from exc
+
+    return (
+        get_user_model()
+        .objects.select_related("security")
+        .prefetch_related("groups")
+        .get(pk=user.pk)
+    )
+
+
+@transaction.atomic
+def update_account(actor_id, target_id, attrs):
+    actor, group, users = _lock_admin_actor(actor_id)
     try:
         target = users.select_for_update().get(pk=target_id)
     except get_user_model().DoesNotExist as exc:
@@ -161,7 +237,6 @@ def update_account(actor_id, target_id, attrs):
         if not remaining:
             raise ValidationError("At least one active administrator must remain.")
     if before != after:
-        group = Group.objects.get(name=ADMIN_GROUP)
         if after["role"] == "admin":
             target.groups.add(group)
         else:
@@ -169,4 +244,4 @@ def update_account(actor_id, target_id, attrs):
         target.is_active = after["is_active"]
         target.save(update_fields=["is_active"])
         AccountAudit.objects.create(actor=actor, target=target, before=before, after=after)
-    return users.select_related("security").get(pk=target.pk)
+    return users.select_related("security").prefetch_related("groups").get(pk=target.pk)

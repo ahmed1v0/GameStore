@@ -6,6 +6,11 @@ import {
 } from "@/lib/api/auth-schemas";
 import { ApiError, authPost } from "@/lib/api/transport";
 
+export const SESSION_EXPIRED_NOTICE =
+  "Your session expired. Sign in again to continue.";
+export const PASSWORD_CHANGED_NOTICE =
+  "Password changed. Sign in again on all devices.";
+
 let session: AuthSession | null = null;
 let sessionNotice: string | null = null;
 let epoch = 0;
@@ -20,6 +25,7 @@ export const getSessionNotice = () => sessionNotice;
 export const getEpoch = () => epoch;
 export const getRequestSignal = () => requestController.signal;
 export const getServerSession = () => null;
+
 export function subscribeSession(listener: () => void) {
   listeners.add(listener);
   return () => {
@@ -30,6 +36,7 @@ export function subscribeSession(listener: () => void) {
 function emit() {
   listeners.forEach((listener) => listener());
 }
+
 export function clearSession(notice: string | null = null) {
   epoch += 1;
   refreshing = null;
@@ -39,27 +46,38 @@ export function clearSession(notice: string | null = null) {
   sessionNotice = notice;
   emit();
 }
+
 function setSession(next: AuthSession) {
   if (session && session.user.id !== next.user.id) clearSession();
   session = next;
+  sessionNotice = null;
   emit();
 }
+
 export function updateSessionUser(user: AuthUser) {
   if (session?.user.id === user.id) setSession({ ...session, user });
 }
+
 export function connectSessionChannel() {
   if (typeof BroadcastChannel === "undefined") return () => {};
   channel = new BroadcastChannel("game-store-session");
   const current = channel;
   current.onmessage = (event: MessageEvent) => {
-    if (event.data === "logout" || event.data === "login") clearSession();
-    if (event.data === "login") void refreshSession().catch(() => {});
+    if (event.data === "logout") {
+      clearSession("You signed out in another tab.");
+      return;
+    }
+    if (event.data === "login") {
+      clearSession();
+      void refreshSession().catch(() => {});
+    }
   };
   return () => {
     current.close();
     if (channel === current) channel = null;
   };
 }
+
 async function sessionLock<T>(operation: () => Promise<T>): Promise<T> {
   if (typeof navigator !== "undefined" && navigator.locks) {
     return navigator.locks.request("game-store-auth-cookie", operation);
@@ -69,7 +87,10 @@ async function sessionLock<T>(operation: () => Promise<T>): Promise<T> {
   localLock = pending.catch(() => {});
   return pending;
 }
-export function refreshSession(): Promise<AuthSession | null> {
+
+export function refreshSession(
+  showExpiredNotice = false,
+): Promise<AuthSession | null> {
   if (refreshing) return refreshing;
   const started = epoch;
   const operation = sessionLock(async () => {
@@ -84,8 +105,9 @@ export function refreshSession(): Promise<AuthSession | null> {
         started === epoch &&
         error instanceof ApiError &&
         error.status === 401
-      )
-        clearSession();
+      ) {
+        clearSession(showExpiredNotice ? SESSION_EXPIRED_NOTICE : null);
+      }
       if (error instanceof ApiError && error.status === 401) return null;
       throw error;
     }
@@ -98,6 +120,7 @@ export function refreshSession(): Promise<AuthSession | null> {
     .catch(() => {});
   return operation;
 }
+
 export async function loginSession(username: string, password: string) {
   clearSession();
   const started = epoch;
@@ -112,11 +135,13 @@ export async function loginSession(username: string, password: string) {
     channel?.postMessage("login");
   });
 }
+
 export async function logoutSession() {
   clearSession();
   channel?.postMessage("logout");
   await sessionLock(() => authPost("/auth/logout", messageSchema));
 }
+
 export async function changeSessionPassword(body: Record<string, string>) {
   const started = epoch;
   return sessionLock(async () => {
@@ -140,8 +165,9 @@ export async function changeSessionPassword(body: Record<string, string>) {
           started === epoch &&
           refreshError instanceof ApiError &&
           refreshError.status === 401
-        )
-          clearSession();
+        ) {
+          clearSession(SESSION_EXPIRED_NOTICE);
+        }
         throw refreshError;
       }
       if (started !== epoch)
@@ -153,10 +179,12 @@ export async function changeSessionPassword(body: Record<string, string>) {
         current.access,
       );
     }
-    if (started === epoch) clearSession("Password changed. Sign in again on all devices.");
+    if (started === epoch)
+      clearSession(PASSWORD_CHANGED_NOTICE);
     channel?.postMessage("logout");
   });
 }
+
 export async function resetSessionPassword(body: Record<string, string>) {
   return sessionLock(async () => {
     const result = await authPost("/auth/reset-password", messageSchema, body);
