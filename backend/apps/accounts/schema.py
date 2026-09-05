@@ -24,18 +24,12 @@ def document_auth_errors(result, generator, request, public):
             }.items():
                 operation.setdefault("responses", {}).setdefault(code, {"description": description})
             if path.startswith("/api/v1/auth/") and method == "post":
-                operation.setdefault("parameters", []).append(
-                    {
-                        "name": "X-CSRFToken",
-                        "in": "header",
-                        "required": False,
-                        "schema": {"type": "string"},
-                        "description": (
-                            "Required for browser clients. Swagger UI fetches a fresh token from "
-                            "GET /api/v1/auth/csrf and injects this header automatically."
-                        ),
-                    }
+                csrf_note = (
+                    "Browser clients require X-CSRFToken from GET /api/v1/auth/csrf. "
+                    "Swagger UI injects it automatically."
                 )
+                existing = operation.get("description", "").rstrip()
+                operation["description"] = f"{existing}\n\n{csrf_note}".strip()
             if path in {"/api/v1/auth/refresh", "/api/v1/auth/logout"} and method == "post":
                 operation.setdefault("parameters", []).append(
                     {

@@ -32,9 +32,21 @@ SWAGGER_UI_SETTINGS = r"""
       throw new Error("The API returned an invalid CSRF token.");
     }
 
-    request.headers = request.headers || {};
-    request.headers["X-CSRFToken"] = token;
-    request.credentials = "include";
+    const headers = request.headers || {};
+    if (typeof headers.delete === "function" && typeof headers.set === "function") {
+      headers.delete("X-CSRFToken");
+      headers.set("X-CSRFToken", token);
+    } else {
+      for (const name of Object.keys(headers)) {
+        if (name.toLowerCase() === "x-csrftoken") {
+          delete headers[name];
+        }
+      }
+      headers["X-CSRFToken"] = token;
+    }
+
+    request.headers = headers;
+    request.credentials = "same-origin";
     return request;
   }
 }

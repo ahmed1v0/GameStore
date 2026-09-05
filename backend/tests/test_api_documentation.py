@@ -27,13 +27,12 @@ def test_schema_is_public_and_contains_application_contract(api_client: APIClien
     assert "/api/v1/admin/users" in paths
     assert "/api/v1/admin/users/{id}" in paths
 
-    csrf_parameter = next(
-        p
-        for p in paths["/api/v1/auth/login"]["post"]["parameters"]
-        if p["name"] == "X-CSRFToken"
+    login_operation = paths["/api/v1/auth/login"]["post"]
+    assert not any(
+        parameter["name"].lower() == "x-csrftoken"
+        for parameter in login_operation.get("parameters", [])
     )
-    assert csrf_parameter["required"] is False
-    assert "Swagger UI" in csrf_parameter["description"]
+    assert "Swagger UI injects it automatically" in login_operation["description"]
 
     assert "/api/v1/products" in paths
     assert "/api/v1/products/{id}" in paths
@@ -57,4 +56,25 @@ def test_swagger_ui_is_public_and_initializes_csrf(api_client: APIClient) -> Non
     assert b"Game Store API" in response.content
     assert b"requestInterceptor" in response.content
     assert b"/api/v1/auth/csrf" in response.content
+    assert b"name.toLowerCase()" in response.content
     assert b"X-CSRFToken" in response.content
+
+
+@pytest.mark.django_db
+def test_csrf_token_authorizes_forgot_password_request() -> None:
+    client = APIClient(enforce_csrf_checks=True)
+    csrf_response = client.get("/api/v1/auth/csrf")
+
+    assert csrf_response.status_code == 200
+    token = csrf_response.data["csrfToken"]
+    assert len(token) in {32, 64}
+    assert "csrftoken" in client.cookies
+
+    response = client.post(
+        "/api/v1/auth/forgot-password",
+        {"email": "missing@example.com"},
+        format="json",
+        HTTP_X_CSRFTOKEN=token,
+    )
+
+    assert response.status_code == 200
