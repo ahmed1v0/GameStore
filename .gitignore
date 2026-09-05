@@ -1,0 +1,27 @@
+.env
+backend/.env
+frontend/.env.local
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.sqlite3
+.pytest_cache/
+.test-files/
+pytest-cache-files-*/
+.coverage
+.ruff_cache/
+
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
+frontend/out/
+frontend/dist/
+*.tsbuildinfo
+
+.idea/
+.vscode/*
+!.vscode/launch.json
+.DS_Store
+# Local administrator login notes
+/ADMIN_CREDENTIALS.local.md
