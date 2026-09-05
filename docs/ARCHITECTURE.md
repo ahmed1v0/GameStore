@@ -81,15 +81,19 @@ sequenceDiagram
     participant V as Order API view
     participant S as Purchase service
     participant DB as PostgreSQL
-    C->>V: POST /api/v1/orders {product_id}
-    V->>V: Validate JWT and request
-    V->>DB: Load product
-    V->>S: purchase_product(user, product)
-    S->>DB: Create order with snapshots
-    DB-->>S: Persisted order
-    S-->>V: Order
+    C->>V: POST /api/v1/orders + Idempotency-Key
+    V->>V: Validate JWT, payload and UUID key
+    V->>S: purchase_product(user, product_id, key)
+    S->>DB: Look up customer/key; atomically get or create snapshot
+    DB-->>S: Unique order for customer/key
+    S->>S: Reject mismatched product with 409
+    S-->>V: Original or newly created order
     V-->>C: 201 receipt
 ```
+
+The database constraint resolves concurrent requests across workers. Unresolved client
+intents survive same-tab reloads; retries preserve the original key. See
+[Purchase idempotency](PURCHASE_IDEMPOTENCY.md) for the contract, migration and race tests.
 
 ## CSV Import Flow
 

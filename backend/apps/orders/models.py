@@ -11,6 +11,8 @@ class Order(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="orders")
+    # Legacy receipts have no key; new API purchases always supply one.
+    idempotency_key = models.UUIDField(null=True, editable=False)
     product_title = models.CharField(max_length=255)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     product_location = models.CharField(max_length=2, choices=Product.Location)
@@ -19,6 +21,9 @@ class Order(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
         constraints = [
+            models.UniqueConstraint(
+                fields=["user", "idempotency_key"], name="orders_user_idempotency_key_unique"
+            ),
             models.CheckConstraint(
                 condition=models.Q(unit_price__gte=Decimal("0.00")),
                 name="orders_order_unit_price_non_negative",

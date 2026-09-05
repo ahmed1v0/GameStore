@@ -222,7 +222,9 @@ trade-offs behind each meaningful choice.
 ## Assumptions
 
 - Products are digital and have no inventory limit.
-- Each purchase creates one order for one product.
+- Each purchase intent creates one order for one product. `POST /api/v1/orders` requires
+  a UUID `Idempotency-Key`; retries with that key return the original receipt. See
+  [purchase idempotency](docs/PURCHASE_IDEMPOTENCY.md) for migration and client details.
 - Prices use two decimal places and a single unspecified settlement currency.
 - Product IDs in the source CSV are stable external identifiers.
 - The prompt did not include product rows, so `data/items.csv` contains representative

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from django.urls import reverse
@@ -20,7 +21,10 @@ def test_authenticated_user_can_purchase(
     )
 
     response = authenticated_client.post(
-        reverse("order-create"), {"product_id": product.id}, format="json"
+        reverse("order-create"),
+        {"product_id": product.id},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=str(uuid4()),
     )
 
     assert response.status_code == 201
@@ -55,7 +59,10 @@ def test_receipt_snapshots_survive_product_changes(
 ) -> None:
     product = product_factory(title="Original title", price=Decimal("10.00"), location="SA")
     purchase_response = authenticated_client.post(
-        reverse("order-create"), {"product_id": product.id}, format="json"
+        reverse("order-create"),
+        {"product_id": product.id},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=str(uuid4()),
     )
     order_id = purchase_response.data["id"]
 
@@ -74,7 +81,10 @@ def test_receipt_snapshots_survive_product_changes(
 
 def test_unknown_product_is_rejected(authenticated_client: APIClient) -> None:
     response = authenticated_client.post(
-        reverse("order-create"), {"product_id": 999999}, format="json"
+        reverse("order-create"),
+        {"product_id": 999999},
+        format="json",
+        HTTP_IDEMPOTENCY_KEY=str(uuid4()),
     )
 
     assert response.status_code == 404

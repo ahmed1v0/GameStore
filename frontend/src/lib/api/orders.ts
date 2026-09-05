@@ -16,12 +16,14 @@ export type OrderReceipt = z.infer<typeof orderReceiptSchema>;
 export function purchaseProduct(
   productId: number,
   accessToken: string,
+  idempotencyKey: string,
 ): Promise<OrderReceipt> {
   return apiRequest("/orders", {
     schema: orderReceiptSchema,
     accessToken,
     init: {
       method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ product_id: productId }),
     },
   });
