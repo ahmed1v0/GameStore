@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -25,14 +26,24 @@ import {
   updateSessionUser,
 } from "./session-store";
 
+export type AuthStatus =
+  | "initializing"
+  | "authenticated"
+  | "anonymous"
+  | "unavailable";
+
 type AuthContextValue = {
   session: AuthSession | null;
+  status: AuthStatus;
   isReady: boolean;
+  notice: string | null;
   startupError: string | null;
   retrySession(): void;
+  revalidateSession(): Promise<void>;
   login(username: string, password: string): Promise<void>;
   logout(): Promise<void>;
 };
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
@@ -41,15 +52,16 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     getSession,
     getServerSession,
   );
-  const [isReady, setIsReady] = useState(false);
   const notice = useSyncExternalStore(
     subscribeSession,
     getSessionNotice,
     getServerSession,
   );
+  const [status, setStatus] = useState<AuthStatus>("initializing");
   const [startupError, setStartupError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [logoutError, setLogoutError] = useState(false);
+  const revalidation = useRef<Promise<void> | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -76,20 +88,19 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
 
   useEffect(() => {
     let active = true;
+    setStatus("initializing");
     void refreshSession()
-      .then(() => {
-        if (active) {
-          setStartupError(null);
-          setIsReady(true);
-        }
+      .then((next) => {
+        if (!active) return;
+        setStartupError(null);
+        setStatus(next ? "authenticated" : "anonymous");
       })
       .catch(() => {
-        if (active) {
-          setStartupError(
-            "Could not check your session. Check the connection and retry.",
-          );
-          setIsReady(true);
-        }
+        if (!active) return;
+        setStartupError(
+          "Could not check your session. Check the connection and retry.",
+        );
+        setStatus(getSession() ? "authenticated" : "unavailable");
       });
     return () => {
       active = false;
@@ -97,28 +108,51 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   }, [attempt]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    let checking = false;
+    if (session) {
+      setStartupError(null);
+      setStatus("authenticated");
+      return;
+    }
+    setStatus((current) =>
+      current === "authenticated" ? "anonymous" : current,
+    );
+  }, [session]);
+
+  const revalidateSession = useCallback((): Promise<void> => {
+    if (revalidation.current) return revalidation.current;
+    const current = getSession();
+    if (!current) return Promise.resolve();
+
+    const operation = getMe(current.access)
+      .then((user) => {
+        updateSessionUser(user);
+      })
+      .catch(() => {
+        // apiRequest handles confirmed authentication rejection. Network failures
+        // preserve the current session and should not interrupt the user.
+      })
+      .finally(() => {
+        if (revalidation.current === operation) revalidation.current = null;
+      });
+    revalidation.current = operation;
+    return operation;
+  }, []);
+
+  useEffect(() => {
     const check = () => {
-      const current = getSession();
-      if (current && document.visibilityState === "visible" && !checking) {
-        checking = true;
-        void getMe(current.access, controller.signal)
-          .then(updateSessionUser)
-          .catch(() => {})
-          .finally(() => {
-            checking = false;
-          });
+      if (document.visibilityState === "visible") {
+        void revalidateSession();
       }
     };
     window.addEventListener("focus", check);
     document.addEventListener("visibilitychange", check);
+    const interval = window.setInterval(check, 5 * 60 * 1000);
     return () => {
-      controller.abort();
+      window.clearInterval(interval);
       window.removeEventListener("focus", check);
       document.removeEventListener("visibilitychange", check);
     };
-  }, []);
+  }, [revalidateSession]);
 
   const logout = useCallback(async () => {
     setLogoutError(false);
@@ -126,27 +160,45 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       await logoutSession();
     } catch {
       setLogoutError(true);
+    } finally {
+      setStatus("anonymous");
     }
   }, []);
+
   const login = useCallback(async (username: string, password: string) => {
     setLogoutError(false);
     await loginSession(username, password);
+    setStatus("authenticated");
+    setStartupError(null);
   }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      isReady,
+      status,
+      isReady: status !== "initializing",
+      notice,
       startupError,
       retrySession() {
         setStartupError(null);
-        setIsReady(false);
+        setStatus("initializing");
         setAttempt((value) => value + 1);
       },
+      revalidateSession,
       login,
       logout,
     }),
-    [session, isReady, startupError, logout, login],
+    [
+      session,
+      status,
+      notice,
+      startupError,
+      revalidateSession,
+      logout,
+      login,
+    ],
   );
+
   return (
     <AuthContext.Provider value={value}>
       {notice && !session && (

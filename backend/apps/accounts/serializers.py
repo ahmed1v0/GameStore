@@ -99,6 +99,25 @@ class SignupSerializer(PasswordSerializer):
         return value
 
 
+class AdminInviteSerializer(StrictSerializer):
+    username = serializers.CharField(
+        max_length=150, validators=get_user_model()._meta.get_field("username").validators
+    )
+    email = serializers.EmailField(max_length=254)
+    role = serializers.ChoiceField(choices=["admin", "user"], default="user")
+
+    def validate_username(self, value):
+        if get_user_model().objects.filter(username=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate_email(self, value):
+        value = value.strip().lower()
+        if get_user_model().objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("An account already uses this email.")
+        return value
+
+
 class LoginSerializer(StrictSerializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(trim_whitespace=False, write_only=True, max_length=128)
